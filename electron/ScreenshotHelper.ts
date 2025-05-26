@@ -168,4 +168,43 @@ export class ScreenshotHelper {
     });
     this.extraScreenshotQueue = [];
   }
+
+  public cleanupAllScreenshots(): void {
+    try {
+      // Clear both screenshot queues
+      this.clearQueues();
+
+      // Clean up all files in screenshot directories
+      if (fs.existsSync(this.screenshotDir)) {
+        const files = fs.readdirSync(this.screenshotDir);
+        files.forEach((file) => {
+          const filePath = path.join(this.screenshotDir, file);
+          try {
+            fs.unlinkSync(filePath);
+          } catch (error) {
+            console.error(`Error deleting screenshot file ${filePath}:`, error);
+          }
+        });
+        console.log("Cleaned up all screenshots from main directory");
+      }
+
+      if (fs.existsSync(this.extraScreenshotDir)) {
+        const files = fs.readdirSync(this.extraScreenshotDir);
+        files.forEach((file) => {
+          const filePath = path.join(this.extraScreenshotDir, file);
+          try {
+            fs.unlinkSync(filePath);
+          } catch (error) {
+            console.error(
+              `Error deleting extra screenshot file ${filePath}:`,
+              error
+            );
+          }
+        });
+        console.log("Cleaned up all screenshots from extra directory");
+      }
+    } catch (error) {
+      console.error("Error cleaning up all screenshots:", error);
+    }
+  }
 }

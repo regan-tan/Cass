@@ -12,3 +12,4 @@ scripts/
 **/scripts/
 scripts/manual-notarize.js
 .copilot/
+.build/

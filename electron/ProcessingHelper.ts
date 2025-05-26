@@ -272,26 +272,105 @@ export class ProcessingHelper {
         },
       }));
 
+      // Prepare content parts array starting with images
+      const contentParts = [...imageParts];
+      console.log(
+        `[PROCESSING] Images added to contentParts: ${imageParts.length}`
+      );
+
       const promptLines = [
         `You are an expert assistant tasked with solving the task shown in the images.`,
         ``,
+      ];
+
+      // Add audio context only if user is actively recording
+      const audioHelper = this.deps.getAudioHelper();
+      if (audioHelper) {
+        const recordingStatus = audioHelper.getRecordingStatus();
+        if (recordingStatus.isRecording && recordingStatus.recording) {
+          try {
+            const audioFilePath =
+              await audioHelper.saveCurrentRecordingForProcessing();
+            if (audioFilePath) {
+              const audioBase64 = await audioHelper.getAudioBase64(
+                audioFilePath
+              );
+              if (audioBase64) {
+                console.log(
+                  `[AUDIO] Audio data available - Base64 length: ${audioBase64.length} characters`
+                );
+
+                // Add audio as multimodal input to Gemini
+                contentParts.push({
+                  inlineData: {
+                    mimeType: "audio/wav",
+                    data: audioBase64,
+                  },
+                });
+
+                console.log(
+                  `[AUDIO] Audio added to contentParts as multimodal input`
+                );
+                console.log(
+                  `[PROCESSING] Total contentParts: ${contentParts.length} (${imageParts.length} images + 1 audio)`
+                );
+
+                // Add recording mode context to help AI understand audio source
+                const recordingModeText =
+                  recordingStatus.recording.recordingMode === "mixed"
+                    ? "both system audio and microphone input"
+                    : recordingStatus.recording.recordingMode ===
+                      "microphone-only"
+                    ? "microphone input only"
+                    : "system audio only";
+
+                promptLines.push(
+                  `## Audio Instructions Available`,
+                  ``,
+                  `You have ${Math.round(
+                    (recordingStatus.recording.duration || 0) / 1000
+                  )} seconds of recorded audio (${recordingModeText}) that contains INSTRUCTIONS or COMMANDS about what to do with the visual content. The audio may contain requests like "optimize this", "explain this", "fix this", "improve this", etc. EXECUTE these audio instructions rather than just describing them.`,
+                  ``
+                );
+              } else {
+                console.log(
+                  `[AUDIO WARNING] Audio file found but Base64 conversion failed`
+                );
+              }
+            } else {
+              console.log(`[AUDIO WARNING] No audio file path available`);
+            }
+          } catch (error) {
+            console.error(
+              "[AUDIO ERROR] Error getting audio data for prompt:",
+              error
+            );
+          }
+        } else {
+          console.log(`[AUDIO INFO] No audio recording available`);
+        }
+      } else {
+        console.log(`[AUDIO INFO] Audio helper not available`);
+      }
+
+      promptLines.push(
         `---`,
         `Your response MUST follow this structure, using Markdown headings:`,
         ``,
         `# Analysis`,
-        `Keep this extremely brief. DO NOT describe the task itself, just focus on your solution approach. One or two sentences maximum.`,
+        `If audio is provided, briefly reference what you hear and how it relates to the visual content. Keep this extremely brief and focus on your solution approach. One or two sentences maximum.`,
         ``,
         `# Solution`,
-        `Provide the direct solution. Use standard Markdown. If code is necessary, use appropriate code blocks. Do not describe the task itself.`,
+        `Provide the direct solution based on both visual and audio content. Use standard Markdown. If code is necessary, use appropriate code blocks. Do not describe the task itself.`,
         `IMPORTANT: When adding code blocks, use triple backticks WITH the language specifier. Use \`\`\`language\\ncode here\\n\`\`\`.`,
         ``,
         `# Summary`,
-        `Provide only 1-2 sentences focusing on implementation details. No conclusions or verbose explanations.`,
+        `Provide only 1-2 sentences focusing on implementation details. Mention if audio context influenced the solution. No conclusions or verbose explanations.`,
         ``,
         `---`,
-        `Remember: Focus on the solution itself, not describing the task or providing extensive conclusions.`,
-        `CODE FORMATTING: Use ONLY \`\`\` WITH the language specifier for all code blocks.`,
-      ];
+        `Remember: If audio is provided, reference it naturally in your response. Focus on the solution itself.`,
+        `CODE FORMATTING: Use ONLY \`\`\` WITH the language specifier for all code blocks.`
+      );
       const prompt = promptLines.join("\n");
 
       if (signal.aborted) throw new Error("Request aborted");
@@ -307,7 +386,7 @@ export class ProcessingHelper {
         // Stream the response with controlled pace
         const result = await geminiModel.generateContentStream([
           prompt,
-          ...imageParts,
+          ...contentParts,
         ]);
 
         let accumulatedText = "";
@@ -332,6 +411,15 @@ export class ProcessingHelper {
             this.deps.PROCESSING_EVENTS.RESPONSE_SUCCESS,
             { response: responseText }
           );
+        }
+
+        // Clean up audio file after successful processing
+        if (audioHelper) {
+          const latestRecording = audioHelper.getLatestRecording();
+          if (latestRecording?.filePath) {
+            audioHelper.cleanupRecording(latestRecording.filePath);
+            console.log("Cleaned up audio file after processing");
+          }
         }
       } finally {
         signal.removeEventListener("abort", abortHandler);
@@ -446,26 +534,107 @@ export class ProcessingHelper {
         },
       }));
 
+      // Prepare content parts array starting with images
+      const contentParts = [...imageParts];
+      console.log(
+        `[FOLLOW-UP] Images added to contentParts: ${imageParts.length}`
+      );
+
       const promptLines = [
         `You are an expert assistant tasked with solving the follow-up issue shown in the images.`,
         ``,
+      ];
+
+      // Add audio context only if user is actively recording
+      const audioHelper = this.deps.getAudioHelper();
+      if (audioHelper) {
+        const recordingStatus = audioHelper.getRecordingStatus();
+        if (recordingStatus.isRecording && recordingStatus.recording) {
+          try {
+            const audioFilePath =
+              await audioHelper.saveCurrentRecordingForProcessing();
+            if (audioFilePath) {
+              const audioBase64 = await audioHelper.getAudioBase64(
+                audioFilePath
+              );
+              if (audioBase64) {
+                console.log(
+                  `[FOLLOW-UP AUDIO] Audio data available - Base64 length: ${audioBase64.length} characters`
+                );
+
+                // Add audio as multimodal input to Gemini
+                contentParts.push({
+                  inlineData: {
+                    mimeType: "audio/wav",
+                    data: audioBase64,
+                  },
+                });
+
+                console.log(
+                  `[FOLLOW-UP AUDIO] Audio added to contentParts as multimodal input`
+                );
+                console.log(
+                  `[FOLLOW-UP] Total contentParts: ${contentParts.length} (${imageParts.length} images + 1 audio)`
+                );
+
+                // Add recording mode context to help AI understand audio source
+                const recordingModeText =
+                  recordingStatus.recording.recordingMode === "mixed"
+                    ? "both system audio and microphone input"
+                    : recordingStatus.recording.recordingMode ===
+                      "microphone-only"
+                    ? "microphone input only"
+                    : "system audio only";
+
+                promptLines.push(
+                  `## Audio Instructions Available`,
+                  ``,
+                  `You have ${Math.round(
+                    (recordingStatus.recording.duration || 0) / 1000
+                  )} seconds of recorded audio (${recordingModeText}) that contains INSTRUCTIONS or COMMANDS about what to do with the visual content. The audio may contain requests like "optimize this", "explain this", "fix this", "improve this", etc. EXECUTE these audio instructions rather than just describing them.`,
+                  ``
+                );
+              } else {
+                console.log(
+                  `[FOLLOW-UP AUDIO WARNING] Audio file found but Base64 conversion failed`
+                );
+              }
+            } else {
+              console.log(
+                `[FOLLOW-UP AUDIO WARNING] No audio file path available`
+              );
+            }
+          } catch (error) {
+            console.error(
+              "[FOLLOW-UP AUDIO ERROR] Error getting audio data for follow-up prompt:",
+              error
+            );
+          }
+        } else {
+          console.log(`[FOLLOW-UP AUDIO INFO] No audio recording available`);
+        }
+      } else {
+        console.log(`[FOLLOW-UP AUDIO INFO] Audio helper not available`);
+      }
+
+      promptLines.push(
         `---`,
         `Your response MUST follow this structure, using Markdown headings:`,
         ``,
         `# Analysis`,
-        `Keep this extremely brief. DO NOT describe the task itself, just focus on your solution approach. One or two sentences maximum.`,
+        `If audio is provided, briefly reference what you hear and how it relates to the visual content. Keep this extremely brief and focus on your solution approach. One or two sentences maximum.`,
         ``,
         `# Solution`,
-        `Provide the direct solution. Use standard Markdown. If code is necessary, use appropriate code blocks. Do not describe the task itself.`,
+        `Provide the direct solution based on both visual and audio content. Use standard Markdown. If code is necessary, use appropriate code blocks. Do not describe the task itself.`,
         `IMPORTANT: When adding code blocks, use triple backticks WITH the language specifier. Use \`\`\`language\\ncode here\\n\`\`\`.`,
         ``,
         `# Summary`,
-        `Provide only 1-2 sentences focusing on implementation details. No conclusions or verbose explanations.`,
+        `Provide only 1-2 sentences focusing on implementation details. Mention if audio context influenced the solution. No conclusions or verbose explanations.`,
         ``,
         `---`,
-        `Remember: Focus on the solution itself, not describing the task or providing extensive conclusions.`,
-        `CODE FORMATTING: Use ONLY \`\`\` WITH the language specifier for all code blocks.`,
-      ];
+        `Remember: If audio is provided, reference it naturally in your response. Focus on the solution itself.`,
+        `CODE FORMATTING: Use ONLY \`\`\` WITH the language specifier for all code blocks.`
+      );
       const prompt = promptLines.join("\n");
 
       if (signal.aborted) throw new Error("Request aborted");
@@ -480,7 +649,7 @@ export class ProcessingHelper {
         // Stream the follow-up response with controlled pace
         const result = await geminiModel.generateContentStream([
           prompt,
-          ...imageParts,
+          ...contentParts,
         ]);
 
         let accumulatedText = "";
@@ -505,6 +674,15 @@ export class ProcessingHelper {
             this.deps.PROCESSING_EVENTS.FOLLOW_UP_SUCCESS,
             { response: followUpResponse }
           );
+        }
+
+        // Clean up audio file after successful follow-up processing
+        if (audioHelper) {
+          const latestRecording = audioHelper.getLatestRecording();
+          if (latestRecording?.filePath) {
+            audioHelper.cleanupRecording(latestRecording.filePath);
+            console.log("Cleaned up audio file after follow-up processing");
+          }
         }
       } finally {
         signal.removeEventListener("abort", abortHandler);

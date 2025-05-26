@@ -45,6 +45,10 @@ export class ShortcutsHelper {
         console.log("Command/Ctrl + Up pressed. Moving window Up.");
         this.deps.moveWindowUp();
       },
+      "CommandOrControl+Q": () => {
+        console.log("Command/Ctrl + Q pressed. Quitting application...");
+        this.deps.quitApplication();
+      },
     };
   }
 

@@ -66,7 +66,6 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
     }
   );
 
-  // Screenshot queue handlers
   ipcMain.handle("get-screenshot-queue", () => {
     return deps.getScreenshotQueue();
   });
@@ -158,6 +157,51 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
   ipcMain.handle("cancel-processing", () => {
     deps.processingHelper?.cancelProcessing();
     return { success: true };
+  });
+
+  // Audio recording handlers
+  ipcMain.handle("start-audio-recording", async () => {
+    try {
+      const result = await deps.startRecording();
+      return { success: true, ...result };
+    } catch (error) {
+      console.error("Error starting audio recording:", error);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  ipcMain.handle("stop-audio-recording", async () => {
+    try {
+      const result = await deps.stopRecording();
+      return { success: true, ...result };
+    } catch (error) {
+      console.error("Error stopping audio recording:", error);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  ipcMain.handle("get-audio-recording-status", () => {
+    try {
+      const status = deps.getRecordingStatus();
+      return {
+        success: true,
+        isRecording: status.isRecording,
+        recording: status.recording,
+      };
+    } catch (error) {
+      console.error("Error getting audio recording status:", error);
+      return { success: false, error: String(error), isRecording: false };
+    }
+  });
+
+  ipcMain.handle("get-audio-base64", async (_event, filePath: string) => {
+    try {
+      const audioBase64 = await deps.getAudioBase64(filePath);
+      return { success: true, audioBase64 };
+    } catch (error) {
+      console.error("Error getting audio base64:", error);
+      return { success: false, error: String(error), audioBase64: null };
+    }
   });
 
   // Window management handlers
@@ -333,4 +377,16 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
       setInitialMouseEvents(mainWindow);
     });
   }
+
+  // Quit application handler
+  ipcMain.handle("quit-application", async () => {
+    try {
+      console.log("Quit application requested via IPC");
+      deps.quitApplication();
+      return { success: true };
+    } catch (error) {
+      console.error("Error quitting application:", error);
+      return { success: false, error: "Failed to quit application" };
+    }
+  });
 }

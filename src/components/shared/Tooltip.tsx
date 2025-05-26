@@ -17,12 +17,12 @@ const MODEL_OPTIONS = [
     id: "gemini-2.0-flash",
     name: "Gemini 2.0 Flash",
     description: "Fast and efficient Gemini model (Google)",
+    default: true,
   },
   {
     id: "gemini-2.5-pro-preview-03-25",
     name: "Gemini 2.5 Pro Preview",
     description: "Latest preview version of Gemini 2.5 Pro (Google)",
-    default: true,
   },
   {
     id: "gemini-2.5-flash-preview-04-17",
@@ -223,7 +223,7 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
                       {error}
                     </div>
                   )}
-                  <div className="flex justify-end pt-1">
+                  <div className="flex justify-between items-center pt-1">
                     <Button
                       type="submit"
                       disabled={isLoading}
@@ -238,6 +238,23 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
                       ) : (
                         "Save Config"
                       )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      className="text-xs h-7"
+                      onClick={async (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        try {
+                          await (window.electronAPI as any).quitApplication();
+                        } catch (error) {
+                          console.error("Error quitting application:", error);
+                        }
+                      }}
+                    >
+                      Quit App
                     </Button>
                   </div>
                 </form>

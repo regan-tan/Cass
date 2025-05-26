@@ -1,6 +1,8 @@
 import { BrowserWindow, app, screen } from "electron";
 
+import { AudioHelper } from "./AudioHelper";
 import { ProcessingHelper } from "./ProcessingHelper";
+import { ScreenCaptureHelper } from "./ScreenCaptureHelper";
 import { ScreenshotHelper } from "./ScreenshotHelper";
 import { ShortcutsHelper } from "./shortcuts";
 import { initializeIpcHandlers } from "./ipcHandlers";
@@ -131,6 +133,8 @@ interface State {
   PROCESSING_EVENTS: ProcessingEvents;
   screenshotHelper: any;
   processingHelper: any;
+  screenCaptureHelper: ScreenCaptureHelper | null;
+  audioHelper: AudioHelper | null;
   view: "initial" | "response" | "followup";
   step: number;
 }
@@ -148,6 +152,8 @@ const state: State = {
   hasFollowedUp: false,
   screenshotHelper: null,
   processingHelper: null,
+  screenCaptureHelper: null,
+  audioHelper: null,
   view: "initial",
   step: 0,
   PROCESSING_EVENTS: {
@@ -174,6 +180,8 @@ export interface IProcessingHelperDeps {
   setHasFollowedUp: (hasFollowedUp: boolean) => void;
   clearQueues: () => void;
   PROCESSING_EVENTS: typeof state.PROCESSING_EVENTS;
+  getAudioHelper: () => AudioHelper | null;
+  getRecordingStatus: () => { isRecording: boolean; recording?: any };
 }
 
 export interface IShortcutsHelperDeps {
@@ -189,6 +197,7 @@ export interface IShortcutsHelperDeps {
   moveWindowRight: () => void;
   moveWindowUp: () => void;
   moveWindowDown: () => void;
+  quitApplication: () => void;
   PROCESSING_EVENTS: typeof state.PROCESSING_EVENTS;
   setHasFollowedUp: (value: boolean) => void;
   getHasFollowedUp: () => boolean;
@@ -209,15 +218,27 @@ export interface initializeIpcHandlerDeps {
   moveWindowRight: () => void;
   moveWindowUp: () => void;
   moveWindowDown: () => void;
+  quitApplication: () => void;
   getView: () => "initial" | "response" | "followup";
   createWindow: () => BrowserWindow;
   PROCESSING_EVENTS: typeof state.PROCESSING_EVENTS;
   setHasFollowedUp: (value: boolean) => void;
+  getAudioHelper: () => AudioHelper | null;
+  getRecordingStatus: () => { isRecording: boolean; recording?: any };
+  startRecording: () => Promise<{ success: boolean; error?: string }>;
+  stopRecording: () => Promise<{
+    success: boolean;
+    recording?: any;
+    error?: string;
+  }>;
+  getAudioBase64: (filePath: string) => Promise<string>;
 }
 
 // Initialize helpers
 function initializeHelpers() {
   state.screenshotHelper = new ScreenshotHelper(state.view);
+  state.screenCaptureHelper = new ScreenCaptureHelper();
+  state.audioHelper = new AudioHelper();
   state.processingHelper = new ProcessingHelper({
     getScreenshotHelper,
     getMainWindow,
@@ -231,6 +252,8 @@ function initializeHelpers() {
     getHasFollowedUp,
     PROCESSING_EVENTS: state.PROCESSING_EVENTS,
     getConfiguredModel,
+    getAudioHelper,
+    getRecordingStatus,
   } as IProcessingHelperDeps);
   state.shortcutsHelper = new ShortcutsHelper({
     getMainWindow,
@@ -253,6 +276,7 @@ function initializeHelpers() {
       ),
     moveWindowUp: () => moveWindowVertical((y) => y - state.step),
     moveWindowDown: () => moveWindowVertical((y) => y + state.step),
+    quitApplication,
     PROCESSING_EVENTS: state.PROCESSING_EVENTS,
     setHasFollowedUp,
     getHasFollowedUp,
@@ -401,6 +425,24 @@ function createWindow(): BrowserWindow {
   state.currentY = bounds.y;
   state.isWindowVisible = true;
 
+  // Start ScreenCaptureKit protection for stronger screen recording protection
+  if (state.screenCaptureHelper && process.platform === "darwin") {
+    state.screenCaptureHelper
+      .startScreenCaptureProtection(state.mainWindow)
+      .then((success) => {
+        if (success) {
+          console.log("ScreenCaptureKit protection enabled successfully");
+        } else {
+          console.warn(
+            "ScreenCaptureKit protection failed to start, falling back to basic protection"
+          );
+        }
+      })
+      .catch((error) => {
+        console.error("Error starting ScreenCaptureKit protection:", error);
+      });
+  }
+
   return state.mainWindow;
 }
 
@@ -512,6 +554,12 @@ function moveWindowVertical(updateFn: (y: number) => number): void {
   }
 }
 
+// Application control functions
+function quitApplication(): void {
+  console.log("Quit application requested via shortcut");
+  app.quit();
+}
+
 // Window dimension functions
 function setWindowDimensions(width: number, height: number): void {
   if (!state.mainWindow?.isDestroyed()) {
@@ -610,6 +658,7 @@ async function initializeApp() {
         ),
       moveWindowUp: () => moveWindowVertical((y) => y - state.step),
       moveWindowDown: () => moveWindowVertical((y) => y + state.step),
+      quitApplication,
       getView: () => state.screenshotHelper?.getView() || "initial",
       createWindow: () => {
         if (!state.mainWindow) {
@@ -621,6 +670,11 @@ async function initializeApp() {
       setHasFollowedUp: (value) => {
         state.hasFollowedUp = value;
       },
+      getAudioHelper,
+      getRecordingStatus,
+      startRecording,
+      stopRecording,
+      getAudioBase64,
     });
     await createWindow();
     state.shortcutsHelper?.registerGlobalShortcuts();
@@ -661,6 +715,20 @@ function clearQueues(): void {
   setView("initial");
 }
 
+function cleanupAllFiles(): void {
+  // Clean up all screenshots
+  if (state.screenshotHelper) {
+    state.screenshotHelper.cleanupAllScreenshots();
+    console.log("All screenshots cleaned up via cleanup function");
+  }
+
+  // Clean up all audio recordings
+  if (state.audioHelper) {
+    state.audioHelper.cleanupAllRecordings();
+    console.log("All audio recordings cleaned up via cleanup function");
+  }
+}
+
 async function takeScreenshot(): Promise<string> {
   if (!state.mainWindow) throw new Error("No main window available");
   return state.screenshotHelper?.takeScreenshot() || "";
@@ -686,6 +754,40 @@ async function getConfiguredModel(): Promise<string> {
   }
 }
 
+// Audio helper accessor functions
+function getAudioHelper(): AudioHelper | null {
+  return state.audioHelper;
+}
+
+function getRecordingStatus(): { isRecording: boolean; recording?: any } {
+  return state.audioHelper?.getRecordingStatus() || { isRecording: false };
+}
+
+async function startRecording(): Promise<{ success: boolean; error?: string }> {
+  if (!state.audioHelper) {
+    return { success: false, error: "Audio helper not initialized" };
+  }
+  return state.audioHelper.startRecording();
+}
+
+async function stopRecording(): Promise<{
+  success: boolean;
+  recording?: any;
+  error?: string;
+}> {
+  if (!state.audioHelper) {
+    return { success: false, error: "Audio helper not initialized" };
+  }
+  return state.audioHelper.stopRecording();
+}
+
+async function getAudioBase64(filePath: string): Promise<string> {
+  if (!state.audioHelper) {
+    throw new Error("Audio helper not initialized");
+  }
+  return state.audioHelper.getAudioBase64(filePath);
+}
+
 // Export state and functions for other modules
 export {
   state,
@@ -703,11 +805,68 @@ export {
   getScreenshotQueue,
   getExtraScreenshotQueue,
   clearQueues,
+  cleanupAllFiles,
   takeScreenshot,
   setHasFollowedUp,
   getHasFollowedUp,
   getConfiguredModel,
   isWindowUsable,
+  getAudioHelper,
+  getRecordingStatus,
+  startRecording,
+  stopRecording,
+  getAudioBase64,
 };
 
 app.whenReady().then(initializeApp);
+
+// Handle app events for proper cleanup
+app.on("before-quit", async () => {
+  console.log(
+    "App is about to quit, cleaning up ScreenCaptureKit protection, screenshots, and audio recordings..."
+  );
+  if (state.screenCaptureHelper) {
+    await state.screenCaptureHelper.stopScreenCaptureProtection();
+  }
+
+  // Clean up all screenshots
+  if (state.screenshotHelper) {
+    state.screenshotHelper.cleanupAllScreenshots();
+    console.log("All screenshots cleaned up");
+  }
+
+  // Clean up audio recordings
+  if (state.audioHelper) {
+    state.audioHelper.cleanupAllRecordings();
+    console.log("Audio recordings cleaned up");
+  }
+});
+
+app.on("window-all-closed", async () => {
+  // Clean up screen capture protection
+  if (state.screenCaptureHelper) {
+    await state.screenCaptureHelper.stopScreenCaptureProtection();
+  }
+
+  // Clean up all screenshots
+  if (state.screenshotHelper) {
+    state.screenshotHelper.cleanupAllScreenshots();
+    console.log("All screenshots cleaned up on window close");
+  }
+
+  // Clean up audio recordings
+  if (state.audioHelper) {
+    state.audioHelper.cleanupAllRecordings();
+    console.log("Audio recordings cleaned up on window close");
+  }
+
+  if (process.platform !== "darwin") {
+    app.quit();
+  }
+});
+
+app.on("activate", () => {
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createWindow();
+  }
+});

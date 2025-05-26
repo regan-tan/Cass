@@ -26,7 +26,9 @@ export const MarkdownSection = ({
         // <p className="text-xs text-muted-foreground animate-pulse">
         //   Generating response...
         // </p>
-        <LoadingDots size={8} color={"foreground"} gap={4} />
+        <div className="w-full flex flex-row items-center justify-start">
+          <LoadingDots size={4} color={"#FAFAFA"} gap={4} />
+        </div>
       ) : content ? (
         <div className="w-full text-xs">
           <ReactMarkdown

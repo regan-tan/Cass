@@ -57,6 +57,25 @@ interface ElectronAPI {
     success: boolean;
     error?: string;
   }>;
+  // Audio recording
+  startAudioRecording: () => Promise<{ success: boolean; error?: string }>;
+  stopAudioRecording: () => Promise<{
+    success: boolean;
+    recording?: any;
+    error?: string;
+  }>;
+  getAudioRecordingStatus: () => Promise<{
+    success: boolean;
+    isRecording: boolean;
+    recording?: any;
+    error?: string;
+  }>;
+  getAudioBase64: (filePath: string) => Promise<{
+    success: boolean;
+    audioBase64?: string;
+    error?: string;
+  }>;
+  quitApplication: () => Promise<{ success: boolean; error?: string }>;
 }
 
 export const PROCESSING_EVENTS = {
@@ -221,6 +240,14 @@ const electronAPI = {
   setIgnoreMouseEvents: () => ipcRenderer.invoke("set-ignore-mouse-events"),
   setInteractiveMouseEvents: () =>
     ipcRenderer.invoke("set-interactive-mouse-events"),
+  // Audio recording methods
+  startAudioRecording: () => ipcRenderer.invoke("start-audio-recording"),
+  stopAudioRecording: () => ipcRenderer.invoke("stop-audio-recording"),
+  getAudioRecordingStatus: () =>
+    ipcRenderer.invoke("get-audio-recording-status"),
+  getAudioBase64: (filePath: string) =>
+    ipcRenderer.invoke("get-audio-base64", filePath),
+  quitApplication: () => ipcRenderer.invoke("quit-application"),
   onResponseChunk: (callback: (chunk: string) => void) => {
     const subscription = (_: any, chunk: string) => callback(chunk);
     ipcRenderer.on(PROCESSING_EVENTS.RESPONSE_CHUNK, subscription);
