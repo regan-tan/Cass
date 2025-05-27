@@ -29,7 +29,12 @@ export class ScreenCaptureHelper {
         "swift-helpers",
         "ScreenFilterCLI"
       );
-      const fallbackPath = path.join(__dirname, "..", "swift-helpers", "main");
+      const fallbackPath = path.join(
+        __dirname,
+        "..",
+        "swift-helpers",
+        "ScreenFilterCLI"
+      );
 
       if (fs.existsSync(devPath)) {
         return devPath;

@@ -21,7 +21,7 @@ let package = Package(
             name: "ScreenFilterCLI",
             dependencies: [],
             path: ".",
-            sources: ["main.swift"]
+            sources: ["ScreenFilterCLI.swift"]
         ),
         .executableTarget(
             name: "AudioMixerCLI",

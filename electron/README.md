@@ -1,59 +1,136 @@
-# Electron Process Files
+# Electron Main Process
 
-This directory contains the core files for the Electron main process and related functionalities.
+This directory contains the core Electron main process files responsible for managing the application lifecycle, handling system-level operations, and coordinating between the UI and native system capabilities.
+
+## Core Architecture
+
+The main process orchestrates several specialized helper classes to provide the application's functionality:
+
+- **Audio recording and processing** via `AudioHelper`
+- **Screenshot capture and management** via `ScreenshotHelper`
+- **AI processing and API communication** via `ProcessingHelper`
+- **Screen capture protection** via `ScreenCaptureHelper`
+- **Global keyboard shortcuts** via `ShortcutsHelper`
+- **Inter-process communication** via `ipcHandlers`
 
 ## File Descriptions
 
-- `main.ts`: This is the entry point for the Electron main process. It is responsible for:
+### `main.ts`
 
-  - Managing the application lifecycle (startup, quit).
-  - Creating and managing browser windows (`BrowserWindow`).
-  - Initializing and managing global application state.
-  - Coordinating interactions between different helper modules.
-  - Setting up environment variables and application configuration, including the persistent store for API keys and model preferences.
-  - Loading the `index.html` file or a development server URL into the main window.
-  - Handling window movement, resizing, and visibility.
+The application entry point that manages:
 
-- `ProcessingHelper.ts`: This class is responsible for handling the logic related to processing screenshots with a generative AI model (specifically Google's Gemini). Its key responsibilities include:
+- **Application lifecycle**: Startup, window creation, quit handling
+- **Window management**: Creating, positioning, and controlling the main BrowserWindow
+- **Global state coordination**: Managing view states (`initial`, `response`, `followup`)
+- **Configuration management**: Persistent storage for API keys and model preferences using a custom JSON-based store
+- **Helper initialization**: Instantiating and coordinating all helper classes
+- **Environment setup**: Loading development vs production configurations
+- **Screen capture protection**: Initializing Swift helpers to hide the app from screen sharing
 
-  - Communicating with the AI model via API calls.
-  - Managing the state of processing (e.g., `isCurrentlyProcessing`).
-  - Handling different processing views (`initial`, `response`, `followup`).
-  - Preparing image data for API requests.
-  - Parsing responses from the AI model.
-  - Managing `AbortController` instances to cancel ongoing API requests.
-  - Emitting events to the renderer process to update the UI based on processing status (e.g., start, success, error, no screenshots).
+### `AudioHelper.ts`
 
-- `preload.ts`: This script runs in a privileged environment before the renderer process's web page is loaded. Its primary purpose is to securely expose specific Node.js and Electron APIs to the renderer process via the `contextBridge`. This includes:
+Handles all audio recording operations with multiple fallback strategies:
 
-  - Defining a an `electronAPI` object with functions that the renderer can call. These functions typically invoke IPC handlers in the main process.
-  - Setting up listeners for IPC messages sent from the main process to the renderer (e.g., `screenshot-taken`, `reset-view`, various processing events).
-  - Exposing a list of `PROCESSING_EVENTS` constants for consistent event naming between main and renderer.
+- **Multi-source recording**: Attempts to record both system audio and microphone simultaneously
+- **Platform-specific implementations**: Uses FFmpeg on macOS, with Swift helper fallbacks
+- **Intelligent fallbacks**: If mixed recording fails, falls back to microphone-only or system-only
+- **Memory management**: Stores audio data in memory with optional disk persistence for processing
+- **Recording state management**: Tracks recording sessions with start/end times and duration
+- **Format optimization**: Outputs mono audio optimized for speech recognition
 
-- `ipcHandlers.ts`: This file initializes and defines all Inter-Process Communication (IPC) handlers. These handlers are listeners in the main process that respond to messages sent from the renderer process (via the `electronAPI` exposed in `preload.ts`). Key functionalities handled here include:
+### `ProcessingHelper.ts`
 
-  - Getting and setting API configuration (API key, model).
-  - Managing screenshot queues (getting, deleting).
-  - Triggering screenshot capture and processing.
-  - Updating window dimensions.
-  - Handling application reset and state clearing.
-  - Toggling window visibility and managing mouse event pass-through.
-  - Opening external links.
+Manages AI processing workflows and API communication:
 
-- `shortcuts.ts`: This class manages the registration and unregistration of global keyboard shortcuts for the application. It defines actions to be taken when specific key combinations are pressed, such as:
+- **Google Gemini integration**: Handles API authentication and request formatting
+- **Context management**: Maintains conversation history and follow-up context
+- **Image processing**: Prepares screenshots for API submission (base64 encoding)
+- **Audio transcription**: Processes recorded audio through the AI model
+- **Response handling**: Parses and formats AI responses for the UI
+- **Abort control**: Manages request cancellation for ongoing API calls
+- **Error handling**: Comprehensive error management with user-friendly messages
+- **View state coordination**: Handles different processing flows based on current view
 
-  - Taking a screenshot and processing it (`CommandOrControl+Enter`).
-  - Resetting the application state (`CommandOrControl+R`).
-  - Moving the application window (`CommandOrControl+ArrowKeys`).
-  - Toggling window visibility (`CommandOrControl+\`).
-  - It dynamically registers/unregisters app-specific shortcuts based on window visibility to avoid conflicts when the app window is hidden.
+### `ScreenshotHelper.ts`
 
-- `ScreenshotHelper.ts`: This class is responsible for all operations related to capturing and managing screenshots. Its duties include:
+Manages screenshot capture and queue management:
 
-  - Capturing screenshots using platform-specific commands (`screencapture` on macOS, PowerShell on Windows).
-  - Saving screenshots to designated directories (`screenshots` and `extra_screenshots` within the app's user data path).
-  - Managing two separate screenshot queues: a main queue for initial processing and an "extra" queue for follow-up screenshots.
-  - Enforcing a maximum number of screenshots per queue (currently 1), deleting older ones as new ones are added.
-  - Providing image previews in base64 format.
-  - Deleting individual screenshots from the queues and file system.
-  - Synchronizing its state with the application's current `view` (`initial`, `response`, `followup`) to determine which queue to use.
+- **Platform-specific capture**: Uses `screencapture` on macOS, PowerShell on Windows
+- **Dual queue system**: Maintains separate queues for initial and follow-up screenshots
+- **Automatic cleanup**: Enforces maximum queue sizes and removes old files
+- **Preview generation**: Creates base64 previews for UI display
+- **File system management**: Organizes screenshots in user data directories
+- **Queue synchronization**: Coordinates with application view states
+- **Batch operations**: Supports processing multiple screenshots simultaneously
+
+### `ScreenCaptureHelper.ts`
+
+Provides screen sharing invisibility through native Swift helpers:
+
+- **Swift helper management**: Spawns and manages the ScreenFilterCLI process
+- **Window exclusion**: Uses macOS ScreenCaptureKit to exclude the app from screen recordings
+- **Process lifecycle**: Handles starting, stopping, and monitoring the helper process
+- **Permission management**: Ensures proper screen recording permissions
+- **Error recovery**: Handles helper process failures and restarts
+- **Development vs production**: Adapts helper paths for different build environments
+
+### `shortcuts.ts` (ShortcutsHelper)
+
+Manages global keyboard shortcuts and window controls:
+
+- **Global shortcut registration**: Uses Electron's globalShortcut API
+- **Dynamic registration**: Registers/unregisters shortcuts based on window visibility
+- **Window movement**: Handles arrow key navigation to move the window
+- **Action triggers**: Maps shortcuts to specific application functions
+- **Conflict avoidance**: Prevents shortcut conflicts when the window is hidden
+- **Context-aware shortcuts**: Different behavior based on application state
+
+### `ipcHandlers.ts`
+
+Defines Inter-Process Communication between main and renderer processes:
+
+- **API configuration**: Handlers for getting/setting API keys and model preferences
+- **Screenshot operations**: Triggering capture, retrieving queues, deleting images
+- **Processing control**: Starting AI processing and handling responses
+- **Window management**: Updating dimensions, toggling visibility, mouse pass-through
+- **Application state**: Reset functionality and state clearing
+- **External links**: Safe opening of URLs in the default browser
+- **Error propagation**: Proper error handling between processes
+
+### `preload.ts`
+
+Security bridge between main and renderer processes:
+
+- **Context bridge setup**: Safely exposes main process APIs to the renderer
+- **API surface definition**: Defines the `electronAPI` interface available to the UI
+- **Event forwarding**: Sets up listeners for main-to-renderer communication
+- **Type safety**: Ensures proper TypeScript typing for IPC communication
+- **Security isolation**: Maintains security while enabling necessary functionality
+- **Event constants**: Provides consistent event naming across processes
+
+## Dependencies and Integration
+
+- **Google Generative AI**: For AI processing and conversation management
+- **Electron Store**: For persistent configuration (replaced with custom JSON store)
+- **Screenshot Desktop**: For cross-platform screenshot capture
+- **Child Process**: For spawning Swift helpers and native tools
+- **File System**: For managing screenshot files and directories
+- **Path utilities**: For cross-platform file path management
+
+## Data Flow
+
+1. **User Input**: Global shortcuts trigger actions
+2. **Audio Recording**: AudioHelper starts recording system and microphone audio
+3. **Screenshot Capture**: ScreenshotHelper captures and queues desktop images
+4. **AI Processing**: ProcessingHelper sends combined context to Gemini API
+5. **Response Handling**: Processed response flows back through IPC to the UI
+6. **State Updates**: Main process updates view state and notifies renderer
+7. **Follow-up Capability**: Subsequent inputs build on existing context
+
+- Capturing screenshots using platform-specific commands (`screencapture` on macOS, PowerShell on Windows).
+- Saving screenshots to designated directories (`screenshots` and `extra_screenshots` within the app's user data path).
+- Managing two separate screenshot queues: a main queue for initial processing and an "extra" queue for follow-up screenshots.
+- Enforcing a maximum number of screenshots per queue (currently 1), deleting older ones as new ones are added.
+- Providing image previews in base64 format.
+- Deleting individual screenshots from the queues and file system.
+- Synchronizing its state with the application's current `view` (`initial`, `response`, `followup`) to determine which queue to use.
