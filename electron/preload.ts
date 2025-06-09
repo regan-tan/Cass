@@ -22,14 +22,20 @@ interface ElectronAPI {
   onResponseStart: (callback: () => void) => () => void;
   onFollowUpStart: (callback: () => void) => () => void;
   onFollowUpSuccess: (callback: (data: any) => void) => () => void;
+  onFollowUpError: (callback: (error: string) => void) => () => void;
+  onFollowUpChunk: (
+    callback: (data: { response: string }) => void
+  ) => () => void;
   onResponseError: (callback: (error: string) => void) => () => void;
   onResponseSuccess: (callback: (data: any) => void) => () => void;
-  onFollowUpError: (callback: (error: string) => void) => () => void;
-  onResponseChunk: (callback: (chunk: string) => void) => () => void;
+  onResponseChunk: (
+    callback: (data: { response: string }) => void
+  ) => () => void;
   // shortcuts
   toggleMainWindow: () => Promise<{ success: boolean; error?: string }>;
   triggerScreenshot: () => Promise<{ success: boolean; error?: string }>;
   triggerReset: () => Promise<{ success: boolean; error?: string }>;
+  cancelProcessing: () => Promise<{ success: boolean; error?: string }>;
   // movement
   triggerMoveLeft: () => Promise<{ success: boolean; error?: string }>;
   triggerMoveRight: () => Promise<{ success: boolean; error?: string }>;
@@ -166,8 +172,8 @@ const electronAPI = {
       );
     };
   },
-  onFollowUpChunk: (callback: (data: any) => void) => {
-    const subscription = (_: any, data: any) => callback(data);
+  onFollowUpChunk: (callback: (data: { response: string }) => void) => {
+    const subscription = (_: any, data: { response: string }) => callback(data);
     ipcRenderer.on(PROCESSING_EVENTS.FOLLOW_UP_CHUNK, subscription);
     return () => {
       ipcRenderer.removeListener(
@@ -198,6 +204,7 @@ const electronAPI = {
   },
   triggerScreenshot: () => ipcRenderer.invoke("trigger-screenshot"),
   triggerReset: () => ipcRenderer.invoke("trigger-reset"),
+  cancelProcessing: () => ipcRenderer.invoke("cancel-processing"),
   triggerMoveLeft: () => ipcRenderer.invoke("trigger-move-left"),
   triggerMoveRight: () => ipcRenderer.invoke("trigger-move-right"),
   triggerMoveUp: () => ipcRenderer.invoke("trigger-move-up"),
@@ -248,8 +255,8 @@ const electronAPI = {
   getAudioBase64: (filePath: string) =>
     ipcRenderer.invoke("get-audio-base64", filePath),
   quitApplication: () => ipcRenderer.invoke("quit-application"),
-  onResponseChunk: (callback: (chunk: string) => void) => {
-    const subscription = (_: any, chunk: string) => callback(chunk);
+  onResponseChunk: (callback: (data: { response: string }) => void) => {
+    const subscription = (_: any, data: { response: string }) => callback(data);
     ipcRenderer.on(PROCESSING_EVENTS.RESPONSE_CHUNK, subscription);
     return () => {
       ipcRenderer.removeListener(

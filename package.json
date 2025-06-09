@@ -10,6 +10,7 @@
     "build:native:clean": "cd native && node-gyp clean && node-gyp rebuild",
     "dev": "cross-env NODE_ENV=development vite",
     "dev:prod": "cross-env NODE_ENV=production npm run clean && vite build && tsc -p tsconfig.electron.json && electron .",
+    "build:mac": "cross-env NODE_ENV=production rimraf dist dist-electron && npm run build:swift:universal && vite build && tsc -p tsconfig.electron.json && electron-builder --mac",
     "build": "cross-env NODE_ENV=production rimraf dist dist-electron && npm run build:swift:universal && vite build && tsc -p tsconfig.electron.json && electron-builder --mac --win --x64"
   },
   "build": {
@@ -30,18 +31,8 @@
     "generateUpdatesFilesForAllChannels": true,
     "extraResources": [
       {
-        "from": ".env",
-        "to": ".env",
-        "filter": [
-          "**/*"
-        ]
-      },
-      {
-        "from": "swift-helpers/.build/release/swift-helpers-universal",
-        "to": "swift-helpers",
-        "filter": [
-          "**/*"
-        ]
+        "from": "swift-helpers/.build/release/AudioMixer",
+        "to": "swift-helpers/AudioMixer"
       }
     ],
     "mac": {
@@ -64,12 +55,12 @@
       ],
       "artifactName": "Ikiag-${arch}.${ext}",
       "icon": "assets/icons/mac/icon.icns",
-      "hardenedRuntime": true,
+      "hardenedRuntime": false,
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
-      "identity": "Developer ID Application",
-      "notarize": true,
+      "identity": null,
+      "notarize": false,
       "protocols": {
         "name": "ikiag-protocol",
         "schemes": [
@@ -92,7 +83,7 @@
       "target": [
         "AppImage"
       ],
-      "icon": "assets/icons/png/icon-256x256.png",
+      "icon": "assets/icons/png/icon.png",
       "artifactName": "${productName}-Linux-${version}.${ext}",
       "protocols": {
         "name": "ikiag-protocol",

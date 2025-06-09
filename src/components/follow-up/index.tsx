@@ -52,8 +52,10 @@ export default function FollowUp({
       }),
       window.electronAPI.onResetView(() => {
         refetch();
+        setResponseData(null);
         setStreamedResponse("");
         setIsStreaming(false);
+        queryClient.removeQueries({ queryKey: ["followup_response"] });
       }),
       window.electronAPI.onFollowUpStart(() => {
         setIsProcessing(true);

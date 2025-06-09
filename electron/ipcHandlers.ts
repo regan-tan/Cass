@@ -155,7 +155,7 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
 
   // Cancel processing handler
   ipcMain.handle("cancel-processing", () => {
-    deps.processingHelper?.cancelProcessing();
+    deps.processingHelper?.resetProcessing();
     return { success: true };
   });
 
@@ -249,9 +249,7 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
   // Reset handlers
   ipcMain.handle("trigger-reset", () => {
     try {
-      deps.processingHelper?.cancelOngoingRequests();
-      deps.clearQueues();
-      deps.setView("initial");
+      deps.processingHelper?.resetProcessing();
 
       const mainWindow = deps.getMainWindow();
 

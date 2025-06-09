@@ -12,49 +12,92 @@ export class ShortcutsHelper {
     // Define all shortcuts and their handlers
     this.shortcuts = {
       "CommandOrControl+Enter": async () => {
-        await this.deps.takeScreenshot();
-        await this.deps.processingHelper?.processScreenshots();
+        try {
+          await this.deps.takeScreenshot();
+          await this.deps.processingHelper?.processScreenshots();
+          return true;
+        } catch (error) {
+          console.error("Error processing screenshot:", error);
+          return false;
+        }
       },
       "CommandOrControl+R": () => {
-        console.log(
-          "Command + R pressed. Canceling requests and resetting queues..."
-        );
-        this.deps.processingHelper?.cancelOngoingRequests();
-        this.deps.clearQueues();
-        console.log("Cleared queues.");
-        this.deps.setView("initial");
-        const mainWindow = this.deps.getMainWindow();
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send("reset-view");
-          mainWindow.webContents.send("reset");
+        try {
+          console.log(
+            "Command + R pressed. Canceling requests and resetting queues..."
+          );
+          this.deps.processingHelper?.resetProcessing();
+          console.log("Reset processing complete.");
+          return true;
+        } catch (error) {
+          console.error("Error resetting:", error);
+          return false;
         }
       },
       "CommandOrControl+Left": () => {
-        console.log("Command/Ctrl + Left pressed. Moving window left.");
-        this.deps.moveWindowLeft();
+        try {
+          console.log("Command/Ctrl + Left pressed. Moving window left.");
+          this.deps.moveWindowLeft();
+          return true;
+        } catch (error) {
+          console.error("Error moving window left:", error);
+          return false;
+        }
       },
       "CommandOrControl+Right": () => {
-        console.log("Command/Ctrl + Right pressed. Moving window right.");
-        this.deps.moveWindowRight();
+        try {
+          console.log("Command/Ctrl + Right pressed. Moving window right.");
+          this.deps.moveWindowRight();
+          return true;
+        } catch (error) {
+          console.error("Error moving window right:", error);
+          return false;
+        }
       },
       "CommandOrControl+Down": () => {
-        console.log("Command/Ctrl + down pressed. Moving window down.");
-        this.deps.moveWindowDown();
+        try {
+          console.log("Command/Ctrl + down pressed. Moving window down.");
+          this.deps.moveWindowDown();
+          return true;
+        } catch (error) {
+          console.error("Error moving window down:", error);
+          return false;
+        }
       },
       "CommandOrControl+Up": () => {
-        console.log("Command/Ctrl + Up pressed. Moving window Up.");
-        this.deps.moveWindowUp();
+        try {
+          console.log("Command/Ctrl + Up pressed. Moving window Up.");
+          this.deps.moveWindowUp();
+          return true;
+        } catch (error) {
+          console.error("Error moving window up:", error);
+          return false;
+        }
       },
       "CommandOrControl+Q": () => {
-        console.log("Command/Ctrl + Q pressed. Quitting application...");
-        this.deps.quitApplication();
+        try {
+          console.log("Command/Ctrl + Q pressed. Quitting application...");
+          this.deps.quitApplication();
+          return true;
+        } catch (error) {
+          console.error("Error quitting application:", error);
+          return false;
+        }
       },
     };
   }
 
   private registerAppShortcuts(): void {
     Object.entries(this.shortcuts).forEach(([key, handler]) => {
-      globalShortcut.register(key, handler);
+      globalShortcut.register(key, () => {
+        try {
+          handler();
+          return true;
+        } catch (error) {
+          console.error(`Error handling shortcut ${key}:`, error);
+          return false;
+        }
+      });
     });
   }
 
@@ -65,26 +108,27 @@ export class ShortcutsHelper {
   }
 
   public registerGlobalShortcuts(): void {
-    // Toggle window shortcut - this one should always work
     globalShortcut.register("CommandOrControl+\\", () => {
-      const wasVisible = this.deps.isWindowUsable();
-      this.deps.toggleMainWindow();
+      try {
+        const wasVisible = this.deps.isWindowUsable();
+        this.deps.toggleMainWindow();
 
-      // If the window was visible and is now being hidden, unregister the shortcuts
-      if (wasVisible) {
-        this.unregisterAppShortcuts();
-      } else {
-        // If the window was hidden and is now being shown, register the shortcuts
-        this.registerAppShortcuts();
+        if (wasVisible) {
+          this.unregisterAppShortcuts();
+        } else {
+          this.registerAppShortcuts();
+        }
+        return true;
+      } catch (error) {
+        console.error("Error handling toggle shortcut:", error);
+        return false;
       }
     });
 
-    // Register initial shortcuts if window is visible
     if (this.deps.isWindowUsable()) {
       this.registerAppShortcuts();
     }
 
-    // Unregister all shortcuts when quitting
     app.on("will-quit", () => {
       globalShortcut.unregisterAll();
     });

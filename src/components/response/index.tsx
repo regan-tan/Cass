@@ -66,6 +66,7 @@ export default function Response({ setView }: ResponseProps) {
         setExtraScreenshots([]);
         setShowFollowUpView(false);
         setFollowUpProcessing(false);
+        setResponseData(null);
         setStreamedResponse("");
         setIsStreaming(false);
         setTimeout(() => setIsResetting(false), 0);

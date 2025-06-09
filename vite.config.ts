@@ -48,6 +48,22 @@ export default defineConfig({
     outDir: "dist",
     emptyOutDir: true,
     sourcemap: true,
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "react-vendor": ["react", "react-dom"],
+          "ui-vendor": ["framer-motion", "lucide-react"],
+          "utils-vendor": ["clsx", "tailwind-merge"],
+          "markdown-vendor": [
+            "react-markdown",
+            "react-syntax-highlighter",
+            "rehype-raw",
+            "remark-gfm",
+          ],
+        },
+      },
+    },
   },
   resolve: {
     alias: {

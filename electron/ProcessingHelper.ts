@@ -9,10 +9,6 @@ export class ProcessingHelper {
   private screenshotHelper: ScreenshotHelper;
   private isCurrentlyProcessing: boolean = false;
 
-  // AbortControllers for API requests
-  private currentProcessingAbortController: AbortController | null = null;
-  private currentExtraProcessingAbortController: AbortController | null = null;
-
   constructor(deps: IProcessingHelperDeps) {
     this.deps = deps;
     this.screenshotHelper = deps.getScreenshotHelper();
@@ -37,10 +33,6 @@ export class ProcessingHelper {
         const screenshotQueue = this.screenshotHelper.getScreenshotQueue();
         console.log("Processing main queue screenshots:", screenshotQueue);
         try {
-          // Initialize AbortController
-          this.currentProcessingAbortController = new AbortController();
-          const { signal } = this.currentProcessingAbortController;
-
           const screenshots = await Promise.all(
             screenshotQueue.map(async (path) => ({
               path,
@@ -48,10 +40,7 @@ export class ProcessingHelper {
             }))
           );
 
-          const result = await this.processScreenshotsHelper(
-            screenshots,
-            signal
-          );
+          const result = await this.processScreenshotsHelper(screenshots);
 
           if (!result.success) {
             console.log("Processing failed:", result.error);
@@ -80,27 +69,14 @@ export class ProcessingHelper {
           );
           this.deps.setView("response");
         } catch (error: any) {
+          console.error("Processing error:", error);
           mainWindow.webContents.send(
             this.deps.PROCESSING_EVENTS.INITIAL_RESPONSE_ERROR,
-            error
+            error.message || "Server error. Please try again."
           );
-          console.error("Processing error:", error);
-          if (error.message === "Request aborted") {
-            mainWindow.webContents.send(
-              this.deps.PROCESSING_EVENTS.INITIAL_RESPONSE_ERROR,
-              "Processing was canceled by the user."
-            );
-          } else {
-            mainWindow.webContents.send(
-              this.deps.PROCESSING_EVENTS.INITIAL_RESPONSE_ERROR,
-              error.message || "Server error. Please try again."
-            );
-          }
           // Reset view back to queue on error
           console.log("Resetting view to queue due to error");
           this.deps.setView("initial");
-        } finally {
-          this.currentProcessingAbortController = null;
         }
       } else {
         // view == 'response'
@@ -113,10 +89,6 @@ export class ProcessingHelper {
         mainWindow.webContents.send(
           this.deps.PROCESSING_EVENTS.FOLLOW_UP_START
         );
-
-        // Initialize AbortController
-        this.currentExtraProcessingAbortController = new AbortController();
-        const { signal } = this.currentExtraProcessingAbortController;
 
         try {
           const screenshots = await Promise.all(
@@ -133,10 +105,7 @@ export class ProcessingHelper {
             screenshots.map((s) => s.path)
           );
 
-          const result = await this.processExtraScreenshotsHelper(
-            screenshots,
-            signal
-          );
+          const result = await this.processExtraScreenshotsHelper(screenshots);
 
           if (result.success) {
             this.deps.setHasFollowedUp(true);
@@ -151,30 +120,20 @@ export class ProcessingHelper {
             );
           }
         } catch (error: any) {
-          if (error.message === "Request aborted") {
-            mainWindow.webContents.send(
-              this.deps.PROCESSING_EVENTS.FOLLOW_UP_ERROR,
-              "Extra processing was canceled by the user."
-            );
-          } else {
-            mainWindow.webContents.send(
-              this.deps.PROCESSING_EVENTS.FOLLOW_UP_ERROR,
-              error.message
-            );
-          }
-        } finally {
-          this.currentExtraProcessingAbortController = null;
+          mainWindow.webContents.send(
+            this.deps.PROCESSING_EVENTS.FOLLOW_UP_ERROR,
+            error.message
+          );
         }
       }
     } finally {
-      this.isCurrentlyProcessing = false; // Ensure flag is reset
+      this.isCurrentlyProcessing = false;
       console.log("Processing finished. Resetting isCurrentlyProcessing flag.");
     }
   }
 
   private async processScreenshotsHelper(
-    screenshots: Array<{ path: string; data: string }>,
-    signal: AbortSignal
+    screenshots: Array<{ path: string; data: string }>
   ) {
     const MAX_RETRIES = 0;
     let retryCount = 0;
@@ -201,14 +160,10 @@ export class ProcessingHelper {
           `Processing screenshots with provider: ${provider}, model: ${model}`
         );
 
-        const base64Images = imageDataList.map(
-          (data) => data // Keep the base64 string as is
-        );
+        const base64Images = imageDataList.map((data) => data);
 
         if (mainWindow) {
-          // Generate response directly using images
           const responseResult = await this.generateResponseWithImages(
-            signal,
             base64Images,
             apiKey,
             model
@@ -235,11 +190,7 @@ export class ProcessingHelper {
           retryCount,
         });
 
-        if (
-          error.message === "Request aborted" ||
-          error.name === "AbortError" ||
-          retryCount >= MAX_RETRIES
-        ) {
+        if (retryCount >= MAX_RETRIES) {
           return { success: false, error: error.message };
         }
         retryCount++;
@@ -253,7 +204,6 @@ export class ProcessingHelper {
   }
 
   private async generateResponseWithImages(
-    signal: AbortSignal,
     base64Images: string[],
     apiKey: string,
     model: string
@@ -272,19 +222,14 @@ export class ProcessingHelper {
         },
       }));
 
-      // Prepare content parts array starting with images
       const contentParts = [...imageParts];
       console.log(
         `[PROCESSING] Images added to contentParts: ${imageParts.length}`
       );
 
-      const promptLines = [
-        `You are an expert assistant tasked with solving the task shown in the images.`,
-        ``,
-      ];
-
-      // Add audio context only if user is actively recording
       const audioHelper = this.deps.getAudioHelper();
+      let hasAudioInstructions = false;
+
       if (audioHelper) {
         const recordingStatus = audioHelper.getRecordingStatus();
         if (recordingStatus.isRecording && recordingStatus.recording) {
@@ -296,11 +241,11 @@ export class ProcessingHelper {
                 audioFilePath
               );
               if (audioBase64) {
+                hasAudioInstructions = true;
                 console.log(
                   `[AUDIO] Audio data available - Base64 length: ${audioBase64.length} characters`
                 );
 
-                // Add audio as multimodal input to Gemini
                 contentParts.push({
                   inlineData: {
                     mimeType: "audio/wav",
@@ -313,24 +258,6 @@ export class ProcessingHelper {
                 );
                 console.log(
                   `[PROCESSING] Total contentParts: ${contentParts.length} (${imageParts.length} images + 1 audio)`
-                );
-
-                // Add recording mode context to help AI understand audio source
-                const recordingModeText =
-                  recordingStatus.recording.recordingMode === "mixed"
-                    ? "both system audio and microphone input"
-                    : recordingStatus.recording.recordingMode ===
-                      "microphone-only"
-                    ? "microphone input only"
-                    : "system audio only";
-
-                promptLines.push(
-                  `## Audio Instructions Available`,
-                  ``,
-                  `You have ${Math.round(
-                    (recordingStatus.recording.duration || 0) / 1000
-                  )} seconds of recorded audio (${recordingModeText}) that contains INSTRUCTIONS or COMMANDS about what to do with the visual content. The audio may contain requests like "optimize this", "explain this", "fix this", "improve this", etc. EXECUTE these audio instructions rather than just describing them.`,
-                  ``
                 );
               } else {
                 console.log(
@@ -353,37 +280,144 @@ export class ProcessingHelper {
         console.log(`[AUDIO INFO] Audio helper not available`);
       }
 
+      const promptLines = [];
+
+      if (hasAudioInstructions) {
+        const recordingStatus = audioHelper!.getRecordingStatus();
+        const recordingModeText =
+          recordingStatus.recording!.recordingMode === "mixed"
+            ? "both system audio and microphone input"
+            : recordingStatus.recording!.recordingMode === "microphone-only"
+            ? "microphone input only"
+            : "system audio only";
+
+        promptLines.push(
+          `You are an expert assistant that analyzes visual content and executes audio instructions with intelligence and initiative.`,
+          ``,
+          `## Audio Instructions Analysis`,
+          ``,
+          `You have ${Math.round(
+            (recordingStatus.recording!.duration || 0) / 1000
+          )} seconds of recorded audio (${recordingModeText}) containing instructions or commands.`,
+          ``,
+          `**CRITICAL INSTRUCTIONS:**`,
+          `1. **PRIORITIZE THE LATEST/MOST RECENT** audio content - focus on commands given toward the end of the recording`,
+          `2. **BE PROACTIVE AND INTELLIGENT** - if audio is unclear, use context clues to infer intent (e.g., "Ustate" likely means "useState", "optimze" means "optimize")`,
+          `3. **NEVER GIVE UP** - always provide a helpful response even if audio is unclear. Make educated guesses based on visual content and partial audio`,
+          `4. **EXECUTE, DON'T JUST DESCRIBE** - perform the requested action rather than explaining what was asked`,
+          `5. **USE VISUAL CONTEXT** - combine what you see in the images with audio commands for better understanding`,
+          `6. **EXPERTISE DEMONSTRATION** - for concept questions, algorithms, or technical topics, provide comprehensive explanations that demonstrate deep technical knowledge and expertise to convince an interviewer of your competence`,
+          ``,
+          `**CONCEPT DETECTION & EXPERTISE MODE:**`,
+          `- If the request involves explaining concepts (e.g., "what is useState", "explain closures", "how does quicksort work")`,
+          `- If it's about algorithms, data structures, programming fundamentals, or theoretical topics`,
+          `- If it's educational content like LeetCode problems, tutorials, or learning materials`,
+          ``,
+          `**THEN PROVIDE EXPERT-LEVEL EXPLANATIONS INCLUDING:**`,
+          `- Precise technical definitions with proper terminology`,
+          `- Deep understanding of underlying mechanisms and implementation details`,
+          `- Multiple sophisticated examples showing mastery`,
+          `- Advanced use cases and real-world production scenarios`,
+          `- Performance implications, time/space complexity analysis`,
+          `- Edge cases, limitations, and trade-offs`,
+          `- Connections to related advanced concepts and design patterns`,
+          `- Industry best practices and architectural considerations`,
+          `- Common interview follow-up questions and their answers`,
+          ``,
+          `Make explanations demonstrate such thorough expertise that an interviewer would be convinced of deep technical competence.`,
+          ``,
+          `If the audio contains multiple requests, prioritize the most recent ones. If pronunciation is unclear, use the visual content to help interpret the intent.`,
+          ``
+        );
+      } else {
+        promptLines.push(
+          `You are an expert assistant that analyzes visual content and provides intelligent, proactive solutions.`,
+          ``,
+          `## Visual Analysis Task`,
+          ``,
+          `No audio instructions were provided. Analyze the visual content and provide the most helpful response based on what you observe.`,
+          ``,
+          `**APPROACH:**`,
+          `1. **IDENTIFY THE CONTEXT** - understand what's shown in the image (code, UI, document, etc.)`,
+          `2. **INFER THE LIKELY NEED** - based on visual context, determine what assistance would be most valuable`,
+          `3. **BE PROACTIVE** - provide solutions for common issues, improvements, or explanations related to what's visible`,
+          `4. **PRIORITIZE ACTIONABLE HELP** - focus on practical solutions rather than just descriptions`,
+          `5. **EXPERTISE DEMONSTRATION** - if visual content suggests learning or concept exploration, provide comprehensive explanations that showcase deep technical knowledge`,
+          ``,
+          `**EDUCATIONAL CONTENT DETECTION:**`,
+          `- If the visual shows educational materials, documentation, or learning resources`,
+          `- If it appears to be concept exploration, algorithm study, or programming fundamentals`,
+          `- If it's code that demonstrates specific patterns, data structures, or theoretical concepts`,
+          ``,
+          `**THEN PROVIDE EXPERT-LEVEL EXPLANATIONS INCLUDING:**`,
+          `- Precise technical definitions with proper terminology`,
+          `- Deep understanding of underlying mechanisms and implementation details`,
+          `- Multiple sophisticated examples showing mastery`,
+          `- Advanced use cases and real-world production scenarios`,
+          `- Performance implications, time/space complexity analysis`,
+          `- Edge cases, limitations, and trade-offs`,
+          `- Connections to related advanced concepts and design patterns`,
+          `- Industry best practices and architectural considerations`,
+          `- Common interview follow-up questions and their answers`,
+          ``,
+          `Make explanations demonstrate such thorough expertise that an interviewer would be convinced of deep technical competence.`,
+          ``
+        );
+      }
+
       promptLines.push(
         `---`,
-        `Your response MUST follow this structure, using Markdown headings:`,
+        `Your response MUST follow this structured, interview-style format using Markdown:`,
         ``,
         `# Analysis`,
-        `If audio is provided, briefly reference what you hear and how it relates to the visual content. Keep this extremely brief and focus on your solution approach. One or two sentences maximum.`,
+        hasAudioInstructions
+          ? `**Context Understanding:** Briefly reference what you understand from the audio (including any intelligent interpretation of unclear speech) and how it relates to the visual content. If this is a concept/educational request, mention your teaching approach. Be concise but demonstrate comprehension.`
+          : `**Context Understanding:** Briefly analyze the visual content and identify the most valuable assistance you can provide. If this appears to be educational content, mention your explanation approach. Show clear analytical thinking.`,
         ``,
         `# Solution`,
-        `Provide the direct solution based on both visual and audio content. Use standard Markdown. If code is necessary, use appropriate code blocks. Do not describe the task itself.`,
-        `IMPORTANT: When adding code blocks, use triple backticks WITH the language specifier. Use \`\`\`language\\ncode here\\n\`\`\`.`,
+        `**For Educational/Concept Questions:**`,
+        `- **Core Concept:** Start with a precise technical definition`,
+        `- **Deep Dive:** Explain underlying mechanisms and implementation details`,
+        `- **Advanced Examples:** Provide sophisticated code examples with explanations`,
+        `- **Real-World Applications:** Show enterprise-level usage scenarios`,
+        `- **Performance & Trade-offs:** Discuss time/space complexity, limitations, and alternatives`,
+        `- **Best Practices:** Share industry standards and professional recommendations`,
+        `- **Interview Insights:** Cover common follow-up questions and advanced considerations`,
         ``,
-        `# Summary`,
-        `Provide only 1-2 sentences focusing on implementation details. Mention if audio context influenced the solution. No conclusions or verbose explanations.`,
+        `**For Implementation Tasks:**`,
+        hasAudioInstructions
+          ? `Execute the audio instructions with intelligence and initiative. If speech was unclear, use your best interpretation combined with visual context. Provide direct solutions with clear explanations of your approach.`
+          : `Provide the most helpful solution based on the visual content. Anticipate likely needs and provide actionable assistance with clear implementation steps.`,
+        ``,
+        `**Structure your technical explanations like you're demonstrating expertise to a senior interviewer:**`,
+        `- Use precise technical terminology`,
+        `- Show understanding of edge cases and pitfalls`,
+        `- Demonstrate awareness of production considerations`,
+        `- Connect concepts to broader architectural patterns`,
+        ``,
+        `# Implementation`,
+        `When providing code, structure it as follows:`,
+        `- **Context:** Brief explanation of what the code accomplishes`,
+        `- **Code Block:** Well-commented implementation using \`\`\`language\\ncode\\n\`\`\``,
+        `- **Key Points:** Highlight important technical decisions or patterns used`,
+        ``,
+        `# Key Takeaways`,
+        hasAudioInstructions
+          ? `**For Educational Content:** Summarize the most important technical concepts covered, demonstrating depth of expertise. **For Implementation:** Explain your interpretation of audio instructions and the value of your solution. Show confidence in your technical approach.`
+          : `**For Educational Content:** Summarize the most important technical concepts covered, demonstrating depth of expertise. **For Implementation:** Explain your analysis process and the value provided. Show systematic problem-solving thinking.`,
         ``,
         `---`,
-        `Remember: If audio is provided, reference it naturally in your response. Focus on the solution itself.`,
+        hasAudioInstructions
+          ? `Remember: Prioritize latest audio content, be intelligent about unclear speech, NEVER give up. For concept questions, demonstrate expert-level knowledge. For tasks, execute directly. Keep responses focused and concise - avoid being overly lengthy. NEVER use emojis in your response.`
+          : `Remember: Be proactive and provide maximum value. For educational content, showcase deep technical expertise. For tasks, provide actionable solutions. Keep responses focused and concise - avoid being overly lengthy. NEVER use emojis in your response.`,
         `CODE FORMATTING: Use ONLY \`\`\` WITH the language specifier for all code blocks.`
       );
       const prompt = promptLines.join("\n");
-
-      if (signal.aborted) throw new Error("Request aborted");
-      const abortHandler = () => {
-        throw new Error("Request aborted");
-      };
-      signal.addEventListener("abort", abortHandler);
 
       let responseText = "";
       const mainWindow = this.deps.getMainWindow();
 
       try {
-        // Stream the response with controlled pace
         const result = await geminiModel.generateContentStream([
           prompt,
           ...contentParts,
@@ -394,7 +428,6 @@ export class ProcessingHelper {
           const chunkText = chunk.text();
           accumulatedText += chunkText;
 
-          // Send chunk to UI for live markdown rendering
           if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send(
               this.deps.PROCESSING_EVENTS.RESPONSE_CHUNK,
@@ -405,7 +438,6 @@ export class ProcessingHelper {
 
         responseText = accumulatedText;
 
-        // Send final success message
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send(
             this.deps.PROCESSING_EVENTS.RESPONSE_SUCCESS,
@@ -413,7 +445,6 @@ export class ProcessingHelper {
           );
         }
 
-        // Clean up audio file after successful processing
         if (audioHelper) {
           const latestRecording = audioHelper.getLatestRecording();
           if (latestRecording?.filePath) {
@@ -421,8 +452,9 @@ export class ProcessingHelper {
             console.log("Cleaned up audio file after processing");
           }
         }
-      } finally {
-        signal.removeEventListener("abort", abortHandler);
+      } catch (streamError) {
+        console.error("Streaming error:", streamError);
+        throw streamError;
       }
 
       console.log("API response completed, total length:", responseText.length);
@@ -436,18 +468,9 @@ export class ProcessingHelper {
         response: error.response?.data,
       });
 
-      if (error.message === "Request aborted" || error.name === "AbortError") {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send(
-            this.deps.PROCESSING_EVENTS.INITIAL_RESPONSE_ERROR,
-            "Response generation canceled."
-          );
-        }
-        return { success: false, error: "Response generation canceled." };
-      }
-
       if (error.code === "ETIMEDOUT" || error.response?.status === 504) {
-        this.cancelOngoingRequests();
+        this.isCurrentlyProcessing = false;
+        this.deps.setHasFollowedUp(false);
         this.deps.clearQueues();
         this.deps.setView("initial");
         if (mainWindow && !mainWindow.isDestroyed()) {
@@ -494,18 +517,15 @@ export class ProcessingHelper {
   }
 
   private async processExtraScreenshotsHelper(
-    screenshots: Array<{ path: string; data: string }>,
-    signal: AbortSignal
+    screenshots: Array<{ path: string; data: string }>
   ) {
     try {
       const imageDataList = screenshots.map((screenshot) => screenshot.data);
       const mainWindow = this.deps.getMainWindow();
 
-      // Get configured provider and API key from environment
       const provider = process.env.API_PROVIDER || "gemini";
       const apiKey = process.env.API_KEY;
 
-      // Get model directly from config store via deps
       const model = await this.deps.getConfiguredModel();
 
       if (!apiKey) {
@@ -516,11 +536,8 @@ export class ProcessingHelper {
         `Processing follow-up screenshots with provider: ${provider}, model: ${model}`
       );
 
-      const base64Images = imageDataList.map(
-        (data) => data // Keep the base64 string as is
-      );
+      const base64Images = imageDataList.map((data) => data);
 
-      // For follow-up, use the same approach as the initial response, including analysis/summary
       const genAI = new GoogleGenerativeAI(apiKey);
       const geminiModelId = model.startsWith("gemini-")
         ? `models/${model}`
@@ -534,19 +551,14 @@ export class ProcessingHelper {
         },
       }));
 
-      // Prepare content parts array starting with images
       const contentParts = [...imageParts];
       console.log(
         `[FOLLOW-UP] Images added to contentParts: ${imageParts.length}`
       );
 
-      const promptLines = [
-        `You are an expert assistant tasked with solving the follow-up issue shown in the images.`,
-        ``,
-      ];
-
-      // Add audio context only if user is actively recording
       const audioHelper = this.deps.getAudioHelper();
+      let hasAudioInstructions = false;
+
       if (audioHelper) {
         const recordingStatus = audioHelper.getRecordingStatus();
         if (recordingStatus.isRecording && recordingStatus.recording) {
@@ -558,11 +570,11 @@ export class ProcessingHelper {
                 audioFilePath
               );
               if (audioBase64) {
+                hasAudioInstructions = true;
                 console.log(
                   `[FOLLOW-UP AUDIO] Audio data available - Base64 length: ${audioBase64.length} characters`
                 );
 
-                // Add audio as multimodal input to Gemini
                 contentParts.push({
                   inlineData: {
                     mimeType: "audio/wav",
@@ -575,24 +587,6 @@ export class ProcessingHelper {
                 );
                 console.log(
                   `[FOLLOW-UP] Total contentParts: ${contentParts.length} (${imageParts.length} images + 1 audio)`
-                );
-
-                // Add recording mode context to help AI understand audio source
-                const recordingModeText =
-                  recordingStatus.recording.recordingMode === "mixed"
-                    ? "both system audio and microphone input"
-                    : recordingStatus.recording.recordingMode ===
-                      "microphone-only"
-                    ? "microphone input only"
-                    : "system audio only";
-
-                promptLines.push(
-                  `## Audio Instructions Available`,
-                  ``,
-                  `You have ${Math.round(
-                    (recordingStatus.recording.duration || 0) / 1000
-                  )} seconds of recorded audio (${recordingModeText}) that contains INSTRUCTIONS or COMMANDS about what to do with the visual content. The audio may contain requests like "optimize this", "explain this", "fix this", "improve this", etc. EXECUTE these audio instructions rather than just describing them.`,
-                  ``
                 );
               } else {
                 console.log(
@@ -617,36 +611,141 @@ export class ProcessingHelper {
         console.log(`[FOLLOW-UP AUDIO INFO] Audio helper not available`);
       }
 
+      const promptLines = [];
+
+      if (hasAudioInstructions) {
+        const recordingStatus = audioHelper!.getRecordingStatus();
+        const recordingModeText =
+          recordingStatus.recording!.recordingMode === "mixed"
+            ? "both system audio and microphone input"
+            : recordingStatus.recording!.recordingMode === "microphone-only"
+            ? "microphone input only"
+            : "system audio only";
+
+        promptLines.push(
+          `You are an expert assistant that analyzes visual content and executes follow-up audio instructions with intelligence and initiative.`,
+          ``,
+          `## Follow-up Audio Instructions Analysis`,
+          ``,
+          `You have ${Math.round(
+            (recordingStatus.recording!.duration || 0) / 1000
+          )} seconds of recorded audio (${recordingModeText}) containing follow-up instructions or commands.`,
+          ``,
+          `**CRITICAL FOLLOW-UP INSTRUCTIONS:**`,
+          `1. **PRIORITIZE THE LATEST/MOST RECENT** audio content - focus on commands given toward the end of the recording`,
+          `2. **BE PROACTIVE AND INTELLIGENT** - if audio is unclear, use context clues to infer intent (e.g., "Ustate" likely means "useState", "optimze" means "optimize")`,
+          `3. **NEVER GIVE UP** - always provide a helpful response even if audio is unclear. Make educated guesses based on visual content and partial audio`,
+          `4. **EXECUTE, DON'T JUST DESCRIBE** - perform the requested action rather than explaining what was asked`,
+          `5. **USE VISUAL CONTEXT** - combine what you see in the images with audio commands for better understanding`,
+          `6. **BUILD ON PREVIOUS CONTEXT** - this is a follow-up, so consider the conversation flow and provide deeper assistance`,
+          `7. **EXPERTISE DEMONSTRATION** - for concept questions or deeper exploration requests, provide comprehensive explanations that showcase advanced technical knowledge and build on previous context`,
+          ``,
+          `**FOLLOW-UP CONCEPT DETECTION & EXPERTISE MODE:**`,
+          `- If the follow-up involves deeper concept exploration or clarification requests`,
+          `- If it's asking "why", "how does this work", or requesting more examples`,
+          `- If it's building on previous educational content with additional questions`,
+          ``,
+          `**THEN PROVIDE EXPERT-LEVEL FOLLOW-UP EXPLANATIONS INCLUDING:**`,
+          `- Advanced technical details and implementation nuances`,
+          `- Sophisticated examples with production-level considerations`,
+          `- Deep architectural patterns and design decisions`,
+          `- Performance optimizations and scalability concerns`,
+          `- Advanced edge cases and corner scenarios`,
+          `- Industry-standard practices and enterprise solutions`,
+          `- Comparative analysis with alternative approaches`,
+          `- Interview-level technical depth and breadth`,
+          ``,
+          `Make follow-up explanations demonstrate expertise that would impress technical interviewers.`,
+          ``,
+          `If the audio contains multiple requests, prioritize the most recent ones. If pronunciation is unclear, use the visual content to help interpret the intent.`,
+          ``
+        );
+      } else {
+        promptLines.push(
+          `You are an expert assistant that analyzes visual content and provides intelligent, proactive follow-up solutions.`,
+          ``,
+          `## Follow-up Visual Analysis Task`,
+          ``,
+          `No audio instructions were provided for this follow-up. Analyze the visual content and provide additional helpful insights or improvements.`,
+          ``,
+          `**FOLLOW-UP APPROACH:**`,
+          `1. **BUILD ON PREVIOUS INTERACTION** - provide deeper analysis or alternative solutions`,
+          `2. **IDENTIFY NEW OPPORTUNITIES** - look for additional improvements or insights`,
+          `3. **BE PROACTIVE** - anticipate next steps or related assistance that would be valuable`,
+          `4. **PRIORITIZE ACTIONABLE HELP** - focus on practical next steps or enhancements`,
+          `5. **EXPERTISE DEMONSTRATION** - if this appears to be concept exploration, provide comprehensive follow-up explanations that showcase advanced technical knowledge`,
+          ``,
+          `**FOLLOW-UP EDUCATIONAL CONTENT DETECTION:**`,
+          `- If the visual suggests continued learning or deeper concept exploration`,
+          `- If it shows progression in understanding that could benefit from advanced explanations`,
+          `- If it appears to be building on previous educational interactions`,
+          ``,
+          `**THEN PROVIDE EXPERT-LEVEL FOLLOW-UP EXPLANATIONS INCLUDING:**`,
+          `- Advanced technical insights building on likely previous context`,
+          `- Sophisticated examples and enterprise-level applications`,
+          `- Deep architectural considerations and design patterns`,
+          `- Performance optimizations and scalability factors`,
+          `- Industry best practices and professional standards`,
+          `- Advanced troubleshooting and debugging approaches`,
+          `- Comparative analysis with alternative methodologies`,
+          ``,
+          `Make follow-up explanations demonstrate expertise that would impress technical interviewers.`,
+          ``
+        );
+      }
+
       promptLines.push(
         `---`,
-        `Your response MUST follow this structure, using Markdown headings:`,
+        `Your follow-up response MUST follow this structured, interview-style format:`,
         ``,
-        `# Analysis`,
-        `If audio is provided, briefly reference what you hear and how it relates to the visual content. Keep this extremely brief and focus on your solution approach. One or two sentences maximum.`,
+        `# Follow-up Analysis`,
+        hasAudioInstructions
+          ? `**Context Update:** Briefly reference what you understand from the follow-up audio (including any intelligent interpretation of unclear speech) and how it builds on the previous context. Show continuity and progression in understanding.`
+          : `**Context Update:** Briefly analyze the visual content for follow-up opportunities and identify the most valuable additional assistance you can provide. Demonstrate how this builds on previous interactions.`,
         ``,
-        `# Solution`,
-        `Provide the direct solution based on both visual and audio content. Use standard Markdown. If code is necessary, use appropriate code blocks. Do not describe the task itself.`,
-        `IMPORTANT: When adding code blocks, use triple backticks WITH the language specifier. Use \`\`\`language\\ncode here\\n\`\`\`.`,
+        `# Advanced Solution`,
+        `**For Educational/Concept Follow-ups:**`,
+        `- **Building on Context:** Reference and expand upon previous explanations`,
+        `- **Advanced Concepts:** Introduce more sophisticated technical details`,
+        `- **Enterprise Applications:** Show real-world, production-level implementations`,
+        `- **Architectural Patterns:** Discuss design patterns and system architecture`,
+        `- **Performance Optimization:** Cover advanced performance considerations`,
+        `- **Industry Perspectives:** Share professional insights and best practices`,
+        `- **Expert-Level Insights:** Provide details that demonstrate senior-level expertise`,
         ``,
-        `# Summary`,
-        `Provide only 1-2 sentences focusing on implementation details. Mention if audio context influenced the solution. No conclusions or verbose explanations.`,
+        `**For Implementation Follow-ups:**`,
+        hasAudioInstructions
+          ? `Execute the follow-up audio instructions with intelligence and initiative. Build on previous solutions and show technical progression. If speech was unclear, use context to make intelligent interpretations.`
+          : `Provide sophisticated follow-up solutions that build on previous context. Show technical progression and anticipate advanced needs or optimizations.`,
+        ``,
+        `**Demonstrate progression in technical depth:**`,
+        `- Show how concepts connect to broader software engineering principles`,
+        `- Discuss scalability and maintainability considerations`,
+        `- Cover testing strategies and debugging approaches`,
+        `- Reference industry standards and professional practices`,
+        ``,
+        `# Enhanced Implementation`,
+        `When providing follow-up code:`,
+        `- **Evolution:** Show how this builds on or improves previous solutions`,
+        `- **Advanced Code:** Implement more sophisticated patterns using \`\`\`language\\ncode\\n\`\`\``,
+        `- **Technical Decisions:** Explain advanced architectural choices and trade-offs`,
+        ``,
+        `# Progressive Insights`,
+        hasAudioInstructions
+          ? `**Educational Follow-up:** Highlight the advanced technical concepts introduced and how they demonstrate progressive expertise. **Implementation Follow-up:** Explain how you interpreted the follow-up audio and the evolution of the solution. Show technical growth and understanding.`
+          : `**Educational Follow-up:** Highlight the advanced technical concepts introduced and how they demonstrate progressive expertise. **Implementation Follow-up:** Explain the progression in your analysis and the additional value provided. Show systematic advancement in complexity.`,
         ``,
         `---`,
-        `Remember: If audio is provided, reference it naturally in your response. Focus on the solution itself.`,
+        hasAudioInstructions
+          ? `Remember: Prioritize latest audio content, be intelligent about unclear speech, NEVER give up. For concept follow-ups, demonstrate expert-level knowledge. For tasks, execute directly. Keep responses focused and concise - avoid being overly lengthy. NEVER use emojis in your response.`
+          : `Remember: Be proactive and provide maximum follow-up value. For educational content, showcase advanced technical expertise building on context. For tasks, provide actionable next steps. Keep responses focused and concise - avoid being overly lengthy. NEVER use emojis in your response.`,
         `CODE FORMATTING: Use ONLY \`\`\` WITH the language specifier for all code blocks.`
       );
       const prompt = promptLines.join("\n");
 
-      if (signal.aborted) throw new Error("Request aborted");
-      const abortHandler = () => {
-        throw new Error("Request aborted");
-      };
-      signal.addEventListener("abort", abortHandler);
-
       let followUpResponse = "";
 
       try {
-        // Stream the follow-up response with controlled pace
         const result = await geminiModel.generateContentStream([
           prompt,
           ...contentParts,
@@ -657,7 +756,6 @@ export class ProcessingHelper {
           const chunkText = chunk.text();
           accumulatedText += chunkText;
 
-          // Send chunk to UI for live markdown rendering
           if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send(
               this.deps.PROCESSING_EVENTS.FOLLOW_UP_CHUNK,
@@ -668,7 +766,6 @@ export class ProcessingHelper {
 
         followUpResponse = accumulatedText;
 
-        // Send final success message
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send(
             this.deps.PROCESSING_EVENTS.FOLLOW_UP_SUCCESS,
@@ -676,7 +773,6 @@ export class ProcessingHelper {
           );
         }
 
-        // Clean up audio file after successful follow-up processing
         if (audioHelper) {
           const latestRecording = audioHelper.getLatestRecording();
           if (latestRecording?.filePath) {
@@ -684,34 +780,56 @@ export class ProcessingHelper {
             console.log("Cleaned up audio file after follow-up processing");
           }
         }
-      } finally {
-        signal.removeEventListener("abort", abortHandler);
-      }
 
-      console.log(
-        "API response completed for follow-up, total length:",
-        followUpResponse.length
-      );
+        console.log(
+          "API response completed for follow-up, total length:",
+          followUpResponse.length
+        );
 
-      return { success: true, data: followUpResponse };
-    } catch (error: any) {
-      console.error("Follow-up processing error details:", {
-        message: error.message,
-        code: error.code,
-        response: error.response?.data,
-      });
+        return { success: true, data: followUpResponse };
+      } catch (error: any) {
+        console.error("Follow-up processing error details:", {
+          message: error.message,
+          code: error.code,
+          response: error.response?.data,
+        });
 
-      if (error.message === "Request aborted" || error.name === "AbortError") {
-        return { success: false, error: "Follow-up processing canceled." };
-      }
+        if (
+          error.message === "Request aborted" ||
+          error.name === "AbortError" ||
+          error.name === "GoogleGenerativeAIAbortError" ||
+          error.message?.includes("Request aborted")
+        ) {
+          return { success: false, error: "Follow-up processing canceled." };
+        }
 
-      if (error.code === "ETIMEDOUT" || error.response?.status === 504) {
-        this.cancelOngoingRequests();
-        this.deps.clearQueues();
+        if (error.code === "ETIMEDOUT" || error.response?.status === 504) {
+          this.isCurrentlyProcessing = false;
+          this.deps.setHasFollowedUp(false);
+          this.deps.clearQueues();
+          return {
+            success: false,
+            error: "Request timed out. Please try again.",
+          };
+        }
+
         return {
           success: false,
-          error: "Request timed out. Please try again.",
+          error: error.message || "Unknown error during follow-up processing",
         };
+      }
+    } catch (error: any) {
+      console.error("Follow-up processing error:", error);
+
+      this.isCurrentlyProcessing = false;
+      this.deps.setHasFollowedUp(false);
+
+      const mainWindow = this.deps.getMainWindow();
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(
+          this.deps.PROCESSING_EVENTS.FOLLOW_UP_ERROR,
+          error.message || "Unknown error during follow-up processing"
+        );
       }
 
       return {
@@ -721,40 +839,18 @@ export class ProcessingHelper {
     }
   }
 
-  public cancelOngoingRequests(): void {
-    let wasCancelled = false;
-
-    if (this.currentProcessingAbortController) {
-      this.currentProcessingAbortController.abort();
-      this.currentProcessingAbortController = null;
-      wasCancelled = true;
-    }
-
-    if (this.currentExtraProcessingAbortController) {
-      this.currentExtraProcessingAbortController.abort();
-      this.currentExtraProcessingAbortController = null;
-      wasCancelled = true;
-    }
-
+  public resetProcessing(): void {
+    this.isCurrentlyProcessing = false;
     this.deps.setHasFollowedUp(false);
+    this.deps.clearQueues();
+    this.deps.setView("initial");
 
     const mainWindow = this.deps.getMainWindow();
-
-    if (wasCancelled && mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.RESET);
-    }
-  }
-
-  public cancelProcessing(): void {
-    if (this.currentProcessingAbortController) {
-      this.currentProcessingAbortController.abort();
-      this.currentProcessingAbortController = null;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("reset-view");
     }
 
-    if (this.currentExtraProcessingAbortController) {
-      this.currentExtraProcessingAbortController.abort();
-      this.currentExtraProcessingAbortController = null;
-    }
+    console.log("Processing reset by user (Command+R)");
   }
 
   public isProcessing(): boolean {

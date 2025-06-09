@@ -1,6 +1,6 @@
 import { ChildProcess, spawn } from "child_process";
 
-import { BrowserWindow } from "electron";
+import { app } from "electron";
 import fs from "node:fs";
 import os from "os";
 import path from "node:path";
@@ -29,6 +29,19 @@ export class AudioHelper {
   private ensureTempDir(): void {
     if (!fs.existsSync(this.tempDir)) {
       fs.mkdirSync(this.tempDir, { recursive: true });
+    }
+  }
+
+  /**
+   * Get the path to the Swift AudioMixer binary
+   */
+  private getSwiftHelperPath(): string {
+    if (app.isPackaged) {
+      // In packaged app, the helper should be in Resources
+      return path.join(process.resourcesPath, "swift-helpers", "AudioMixer");
+    } else {
+      // In development, use from swift-helpers directory
+      return path.join(process.cwd(), "swift-helpers", "AudioMixer");
     }
   }
 
@@ -482,12 +495,8 @@ export class AudioHelper {
       const fileName = `recording-${timestamp}.wav`;
       const filePath = path.join(this.tempDir, fileName);
 
-      // Path to the built Swift audio mixer in swift-helpers directory
-      const swiftHelperPath = path.join(
-        process.cwd(),
-        "swift-helpers",
-        "AudioMixer"
-      );
+      // Path to the built Swift audio mixer
+      const swiftHelperPath = this.getSwiftHelperPath();
 
       if (!fs.existsSync(swiftHelperPath)) {
         console.error("Swift audio mixer not found at:", swiftHelperPath);
