@@ -32,9 +32,6 @@ export class AudioHelper {
     }
   }
 
-  /**
-   * Get the path to the Swift AudioMixer binary
-   */
   private getSwiftHelperPath(): string {
     if (app.isPackaged) {
       // In packaged app, the helper should be in Resources
@@ -55,10 +52,8 @@ export class AudioHelper {
 
       this.currentRecording = {
         startTime: timestamp,
-        // Note: filePath not set initially - will be set based on recording method
-      };
+        };
 
-      // Strategy 1: Try FFmpeg with both system audio and microphone
       console.log("Attempting FFmpeg with system audio + microphone...");
       const ffmpegResult = await this.tryFFmpegMixedRecording();
       if (ffmpegResult.success) {
@@ -69,7 +64,6 @@ export class AudioHelper {
         "FFmpeg mixed recording failed, trying Swift microphone-only..."
       );
 
-      // Strategy 2: Try Swift helper for microphone-only recording
       const swiftResult = await this.trySwiftMicrophoneRecording();
       if (swiftResult.success) {
         return swiftResult;
@@ -79,7 +73,6 @@ export class AudioHelper {
         "Swift microphone recording failed, falling back to system audio only..."
       );
 
-      // Strategy 3: Fallback to system audio only
       return await this.fallbackToSystemAudioOnly();
     } catch (error: any) {
       console.error("Error starting audio recording:", error);
@@ -95,34 +88,32 @@ export class AudioHelper {
   }> {
     return new Promise((resolve) => {
       try {
-        // Use FFmpeg to record both system audio and microphone, then mix them
         const ffmpegArgs = [
           "-f",
           "avfoundation",
           "-i",
-          ":0", // Microphone input (device 0)
+          ":0",
           "-f",
           "avfoundation",
           "-i",
-          ":1", // System audio output (what's playing through speakers)
+          ":1",
           "-filter_complex",
-          "[0:a][1:a]amix=inputs=2:duration=longest:dropout_transition=0[out]", // Mix both inputs
+          "[0:a][1:a]amix=inputs=2:duration=longest:dropout_transition=0[out]",
           "-map",
-          "[out]", // Use the mixed output
+          "[out]",
           "-ac",
-          "1", // Mono output (better for speech recognition)
+          "1",
           "-ar",
-          "16000", // 16kHz sample rate (optimal for speech AI)
+          "16000",
           "-acodec",
-          "pcm_s16le", // Linear PCM encoding
+          "pcm_s16le",
           "-f",
-          "wav", // Output format
-          "pipe:1", // Output to stdout instead of file
+          "wav",
+          "pipe:1",
         ];
 
         this.ffmpegProcess = spawn("ffmpeg", ffmpegArgs);
 
-        // Collect audio data in memory
         const audioChunks: Buffer[] = [];
         let hasReceivedData = false;
         let hasError = false;
@@ -131,7 +122,6 @@ export class AudioHelper {
           audioChunks.push(chunk);
           hasReceivedData = true;
 
-          // Update current recording buffer in real-time for AI processing
           if (this.currentRecording) {
             this.currentRecording.audioBuffer = Buffer.concat(audioChunks);
           }
@@ -141,7 +131,6 @@ export class AudioHelper {
           const errorMessage = data.toString();
           console.error("FFmpeg mixed stderr:", errorMessage);
 
-          // Check if it's a microphone permission or device error
           if (
             errorMessage.includes("Input/output error") ||
             errorMessage.includes("Device or resource busy") ||
@@ -171,7 +160,6 @@ export class AudioHelper {
           }
         });
 
-        // Give FFmpeg time to start and check for errors
         setTimeout(() => {
           if (
             hasError ||
@@ -206,10 +194,8 @@ export class AudioHelper {
 
     try {
       if (this.ffmpegProcess) {
-        // Send SIGTERM to gracefully stop FFmpeg
         this.ffmpegProcess.kill("SIGTERM");
 
-        // Wait for process to exit
         await new Promise<void>((resolve) => {
           if (this.ffmpegProcess) {
             this.ffmpegProcess.on("exit", () => resolve());
@@ -223,7 +209,6 @@ export class AudioHelper {
       recording.endTime = Date.now();
       recording.duration = recording.endTime - recording.startTime;
 
-      // Store completed recording in memory for potential later use
       this.completedRecordings.push({ ...recording });
 
       this.isRecording = false;
@@ -264,20 +249,16 @@ export class AudioHelper {
   }
 
   public async saveCurrentRecordingForProcessing(): Promise<string | null> {
-    // If there's an active recording in progress, capture current audio without stopping
     if (this.isRecording && this.currentRecording) {
       console.log(
         "Capturing current audio data from in-progress recording (without stopping)"
       );
 
       try {
-        // For in-progress recordings, we need to get the current audio chunks
-        // This requires access to the current audio buffer that's being accumulated
         const timestamp = this.currentRecording.startTime;
         const fileName = `recording-${timestamp}-partial.wav`;
         const filePath = path.join(this.tempDir, fileName);
 
-        // If we have accumulated audio data from the in-progress recording
         if (
           this.currentRecording.audioBuffer &&
           this.currentRecording.audioBuffer.length > 0
@@ -304,7 +285,6 @@ export class AudioHelper {
       }
     }
 
-    // Otherwise, get the most recent completed recording
     const latestRecording =
       this.completedRecordings[this.completedRecordings.length - 1];
 
@@ -318,7 +298,6 @@ export class AudioHelper {
       const fileName = `recording-${timestamp}.wav`;
       const filePath = path.join(this.tempDir, fileName);
 
-      // If recording is already saved to disk, return its path
       if (latestRecording.filePath && fs.existsSync(latestRecording.filePath)) {
         console.log(
           "Audio recording already saved to disk:",
@@ -327,7 +306,6 @@ export class AudioHelper {
         return latestRecording.filePath;
       }
 
-      // Write the in-memory audio buffer to disk for LLM processing
       await fs.promises.writeFile(filePath, latestRecording.audioBuffer);
       latestRecording.filePath = filePath;
 
@@ -340,12 +318,10 @@ export class AudioHelper {
   }
 
   public getLatestRecording(): AudioRecording | null {
-    // If there's an active recording in progress, return it
     if (this.isRecording && this.currentRecording) {
       return this.currentRecording;
     }
 
-    // Otherwise return the most recent completed recording
     return this.completedRecordings.length > 0
       ? this.completedRecordings[this.completedRecordings.length - 1]
       : null;
@@ -364,7 +340,6 @@ export class AudioHelper {
 
   public cleanupAllRecordings(): void {
     try {
-      // Stop any active recording first
       if (this.isRecording && this.ffmpegProcess) {
         this.ffmpegProcess.kill("SIGTERM");
         this.isRecording = false;
@@ -372,10 +347,8 @@ export class AudioHelper {
         this.ffmpegProcess = null;
       }
 
-      // Clear in-memory recordings
       this.completedRecordings = [];
 
-      // Clean up any temporary files in the audio directory
       if (fs.existsSync(this.tempDir)) {
         const files = fs.readdirSync(this.tempDir);
         files.forEach((file) => {
@@ -387,11 +360,9 @@ export class AudioHelper {
           }
         });
 
-        // Try to remove the directory itself if empty
         try {
           fs.rmdirSync(this.tempDir);
         } catch (error) {
-          // Directory might not be empty or might not exist, that's fine
         }
 
         console.log("Cleaned up all audio recordings and temporary files");
@@ -408,13 +379,11 @@ export class AudioHelper {
     console.log("Falling back to system audio only recording...");
 
     try {
-      // Clean up any failed process
       if (this.ffmpegProcess) {
         this.ffmpegProcess.kill();
         this.ffmpegProcess = null;
       }
 
-      // Use FFmpeg to record system audio only (fallback)
       const fallbackArgs = [
         "-f",
         "avfoundation",
@@ -506,7 +475,7 @@ export class AudioHelper {
       this.currentRecording = {
         startTime: timestamp,
         recordingMode: "microphone-only",
-        filePath: filePath, // Swift helper writes directly to file
+        filePath: filePath,
       };
 
       this.ffmpegProcess = spawn(swiftHelperPath, [filePath]);
@@ -537,7 +506,6 @@ export class AudioHelper {
           this.currentRecording.duration =
             this.currentRecording.endTime - this.currentRecording.startTime;
 
-          // Read the file into memory for consistency with FFmpeg approach
           try {
             this.currentRecording.audioBuffer = fs.readFileSync(filePath);
             console.log("Swift audio recording file read into memory");

@@ -24,16 +24,13 @@ export default function Commands({
   );
   const [recordingElapsedTime, setRecordingElapsedTime] = useState(0);
 
-  // Persistent state for status check control
   const statusCheckControl = useRef({
     skipStatusChecks: false,
     lastUserInteraction: 0,
   });
 
-  // Maximum recording time in milliseconds (59 minutes 59 seconds)
   const MAX_RECORDING_TIME = (59 * 60 + 59) * 1000;
 
-  // Format elapsed time as MM:SS or HH:MM:SS
   const formatElapsedTime = (timeMs: number) => {
     const totalSeconds = Math.floor(timeMs / 1000);
     const hours = Math.floor(totalSeconds / 3600);
@@ -48,14 +45,12 @@ export default function Commands({
     return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   };
 
-  // Check recording status on mount and update periodically
   useEffect(() => {
     let consecutiveStoppedChecks = 0;
-    const REQUIRED_STOPPED_CHECKS = 2; // Require 2 consecutive checks showing stopped before resetting
+    const REQUIRED_STOPPED_CHECKS = 2;
 
     const checkRecordingStatus = async () => {
       try {
-        // Skip status check if user just interacted or if explicitly disabled
         const timeSinceLastInteraction =
           Date.now() - statusCheckControl.current.lastUserInteraction;
         if (
@@ -69,30 +64,21 @@ export default function Commands({
         if (result.success) {
           const wasRecording = isRecording;
 
-          // Handle recording state changes with debouncing to prevent false positives during processing
           if (!result.isRecording && wasRecording) {
             consecutiveStoppedChecks++;
-            console.log(
-              `Recording appears stopped (check ${consecutiveStoppedChecks}/${REQUIRED_STOPPED_CHECKS})`
-            );
 
-            // Only reset timer after consecutive checks confirm recording is truly stopped
             if (consecutiveStoppedChecks >= REQUIRED_STOPPED_CHECKS) {
               setIsRecording(false);
               setRecordingStartTime(null);
               setRecordingElapsedTime(0);
-              console.log("Recording confirmed stopped, resetting timer");
               consecutiveStoppedChecks = 0;
             }
           } else if (result.isRecording) {
-            // Reset counter if recording is active
             consecutiveStoppedChecks = 0;
             if (!wasRecording) {
-              // Only sync external recording state if we haven't had recent user interaction
               const timeSinceLastInteraction =
                 Date.now() - statusCheckControl.current.lastUserInteraction;
               if (timeSinceLastInteraction > 3000) {
-                // Recording started externally, sync state and set start time if not already set
                 setIsRecording(true);
                 if (!recordingStartTime) {
                   const currentTime = Date.now();
@@ -111,36 +97,30 @@ export default function Commands({
       }
     };
 
-    // Function to mark user interaction
     const markUserInteraction = () => {
       statusCheckControl.current.lastUserInteraction = Date.now();
     };
 
     checkRecordingStatus();
-    // Check every 500ms for more responsive UI while still preventing false positives
     const interval = setInterval(checkRecordingStatus, 500);
 
     return () => {
       clearInterval(interval);
     };
-  }, [isRecording, recordingStartTime]); // Added recordingStartTime back to dependencies
+  }, [isRecording, recordingStartTime]);
 
-  // Update elapsed time when recording
   useEffect(() => {
     if (isRecording && recordingStartTime) {
       const updateElapsedTime = () => {
         const elapsed = Date.now() - recordingStartTime;
         setRecordingElapsedTime(elapsed);
 
-        // Stop recording if max time reached
         if (elapsed >= MAX_RECORDING_TIME) {
           handleStopRecording();
         }
       };
 
-      // Update immediately
       updateElapsedTime();
-      // Update every 100ms for smoother display
       const interval = setInterval(updateElapsedTime, 100);
       return () => clearInterval(interval);
     }
@@ -148,15 +128,11 @@ export default function Commands({
 
   const handleStopRecording = async () => {
     try {
-      console.log("Stopping recording...");
       const result = await window.electronAPI.stopAudioRecording();
       if (result.success) {
-        console.log("Audio recording stopped:", result.recording);
       } else {
         console.error("Failed to stop recording:", result.error);
-        // On error, revert UI state since the recording might still be active
         setIsRecording(true);
-        // We need a start time for the timer to work, estimate it
         const estimatedStartTime = Date.now() - recordingElapsedTime;
         setRecordingStartTime(estimatedStartTime);
       }
@@ -173,44 +149,36 @@ export default function Commands({
     e.preventDefault();
     e.stopPropagation();
 
-    // IMMEDIATELY disable status checking BEFORE any UI changes to prevent flickering
     statusCheckControl.current.skipStatusChecks = true;
     statusCheckControl.current.lastUserInteraction = Date.now();
 
     try {
       if (isRecording) {
-        // Immediately update UI for better responsiveness
         setIsRecording(false);
         setRecordingStartTime(null);
         setRecordingElapsedTime(0);
         await handleStopRecording();
       } else {
-        // Immediately update UI for better responsiveness
         const startTime = Date.now();
         setIsRecording(true);
         setRecordingStartTime(startTime);
         setRecordingElapsedTime(0);
 
-        console.log("Starting recording...");
         const result = await window.electronAPI.startAudioRecording();
         if (!result.success) {
-          // If recording failed, revert UI state
           setIsRecording(false);
           setRecordingStartTime(null);
           setRecordingElapsedTime(0);
           console.error("Failed to start recording:", result.error);
         } else {
-          console.log("Audio recording started");
         }
       }
     } catch (error) {
-      // If error occurred, revert to stopped state
       setIsRecording(false);
       setRecordingStartTime(null);
       setRecordingElapsedTime(0);
       console.error("Error toggling audio recording:", error);
     } finally {
-      // Re-enable status checks after 3 seconds
       setTimeout(() => {
         statusCheckControl.current.skipStatusChecks = false;
       }, 3000);
@@ -218,12 +186,10 @@ export default function Commands({
   };
 
   const handleMicrophoneMouseEnter = () => {
-    console.log("Mouse entered microphone button");
     window.electronAPI.setInteractiveMouseEvents();
   };
 
   const handleMicrophoneMouseLeave = () => {
-    console.log("Mouse left microphone button");
     window.electronAPI.setIgnoreMouseEvents();
   };
 

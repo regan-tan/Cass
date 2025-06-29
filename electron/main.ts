@@ -36,18 +36,11 @@ async function initializeStore() {
           const config = JSON.parse(data || "{}");
           return config[key];
         } catch (readError) {
-          console.error(
-            `Error reading config file at ${configPath}:`,
-            readError
-          );
-          // Attempt to reset if corrupted
+          console.error(`Error reading config file at ${configPath}:`, readError);
           try {
             await fs.writeFile(configPath, JSON.stringify({}), "utf8");
           } catch (writeError) {
-            console.error(
-              `Failed to reset corrupted config file at ${configPath}:`,
-              writeError
-            );
+            console.error(`Failed to reset corrupted config file at ${configPath}:`, writeError);
           }
           return undefined;
         }
@@ -60,14 +53,10 @@ async function initializeStore() {
             const data = await fs.readFile(configPath, "utf8");
             config = JSON.parse(data || "{}");
           } catch (error) {
-            /* Ignore if file doesn't exist */
+            // Ignore if file doesn't exist
           }
           config = { ...config, [key]: value };
-          await fs.writeFile(
-            configPath,
-            JSON.stringify(config, null, 2),
-            "utf8"
-          );
+          await fs.writeFile(configPath, JSON.stringify(config, null, 2), "utf8");
           return true;
         } catch (error) {
           console.error(`Error setting ${key} in config:`, error);
@@ -75,11 +64,10 @@ async function initializeStore() {
         }
       },
     };
-    console.log("Config store initialized successfully.");
     return true;
   } catch (error) {
     console.error("Error initializing config store:", error);
-    store = null; // Ensure store is null on error
+    store = null;
     return false;
   }
 }
@@ -170,7 +158,6 @@ const state: State = {
   },
 };
 
-// Add interfaces for helper classes
 export interface IProcessingHelperDeps {
   getScreenshotHelper: () => ScreenshotHelper;
   getMainWindow: () => BrowserWindow | null;
@@ -220,7 +207,7 @@ export interface initializeIpcHandlerDeps {
   moveWindowDown: () => void;
   quitApplication: () => void;
   getView: () => "initial" | "response" | "followup";
-  createWindow: () => BrowserWindow;
+  createWindow: () => Promise<BrowserWindow>;
   PROCESSING_EVENTS: typeof state.PROCESSING_EVENTS;
   setHasFollowedUp: (value: boolean) => void;
   getAudioHelper: () => AudioHelper | null;
@@ -234,7 +221,6 @@ export interface initializeIpcHandlerDeps {
   getAudioBase64: (filePath: string) => Promise<string>;
 }
 
-// Initialize helpers
 function initializeHelpers() {
   state.screenshotHelper = new ScreenshotHelper(state.view);
   state.screenCaptureHelper = new ScreenCaptureHelper();
@@ -284,8 +270,7 @@ function initializeHelpers() {
   } as IShortcutsHelperDeps);
 }
 
-// Window management functions
-function createWindow(): BrowserWindow {
+async function createWindow(): Promise<BrowserWindow> {
   if (state.mainWindow) {
     return state.mainWindow;
   }
@@ -426,21 +411,44 @@ function createWindow(): BrowserWindow {
   state.isWindowVisible = true;
 
   // Start ScreenCaptureKit protection for stronger screen recording protection
-  if (state.screenCaptureHelper && process.platform === "darwin") {
-    state.screenCaptureHelper
-      .startScreenCaptureProtection(state.mainWindow)
-      .then((success) => {
-        if (success) {
-          console.log("ScreenCaptureKit protection enabled successfully");
-        } else {
-          console.warn(
-            "ScreenCaptureKit protection failed to start, falling back to basic protection"
-          );
-        }
-      })
-      .catch((error) => {
-        console.error("Error starting ScreenCaptureKit protection:", error);
-      });
+  if (process.platform === "darwin") {
+    if (!state.screenCaptureHelper) {
+      console.error("ScreenCaptureHelper not initialized. Application requires screen capture protection on macOS.");
+      const { dialog } = require('electron');
+      dialog.showErrorBox(
+        'IKIAG - Screen Protection Required',
+        'Screen capture protection could not be initialized. This feature is required for IKIAG to remain undetectable during screen sharing.\n\nPlease ensure you have granted Screen Recording permissions to IKIAG in System Preferences > Security & Privacy > Privacy > Screen Recording.'
+      );
+      app.quit();
+      return state.mainWindow;
+    }
+    
+    try {
+      const success = await state.screenCaptureHelper.startScreenCaptureProtection(state.mainWindow);
+      if (!success) {
+        console.error("Failed to start screen capture protection. This is required for undetectable operation.");
+        const { dialog } = require('electron');
+        dialog.showErrorBox(
+          'IKIAG - Screen Protection Failed',
+          'Screen capture protection failed to start. This feature is required for IKIAG to remain undetectable during screen sharing.\n\nPlease ensure you have granted Screen Recording permissions to IKIAG in System Preferences > Security & Privacy > Privacy > Screen Recording.'
+        );
+        app.quit();
+        return state.mainWindow;
+      }
+      console.log("ScreenCaptureKit protection enabled successfully");
+    } catch (error) {
+      console.error("Error starting ScreenCaptureKit protection:", error);
+      console.error("Screen capture protection is required for this application to work properly.");
+      const { dialog } = require('electron');
+      dialog.showErrorBox(
+        'IKIAG - Screen Protection Error',
+        `Screen capture protection encountered an error: ${error}\n\nThis feature is required for IKIAG to remain undetectable during screen sharing.\n\nPlease ensure:\n1. You have granted Screen Recording permissions to IKIAG\n2. You are running macOS 12.3 or later\n3. The Swift helper binaries are properly installed`
+      );
+      app.quit();
+      return state.mainWindow;
+    }
+  } else {
+    console.warn("Screen capture protection is only available on macOS. Some features may not work as expected.");
   }
 
   return state.mainWindow;
@@ -469,7 +477,7 @@ function handleWindowClosed(): void {
 
 // Window visibility functions
 function hideMainWindow(): void {
-  if (!state.mainWindow?.isDestroyed()) {
+  if (state.mainWindow && !state.mainWindow.isDestroyed()) {
     const bounds = state.mainWindow.getBounds();
     state.windowPosition = { x: bounds.x, y: bounds.y };
     state.windowSize = { width: bounds.width, height: bounds.height };
@@ -485,7 +493,7 @@ function hideMainWindow(): void {
 }
 
 function showMainWindow(): void {
-  if (!state.mainWindow?.isDestroyed()) {
+  if (state.mainWindow && !state.mainWindow.isDestroyed()) {
     if (state.windowPosition && state.windowSize) {
       state.mainWindow.setBounds({
         ...state.windowPosition,
@@ -516,8 +524,8 @@ function showMainWindow(): void {
 function isWindowUsable(): boolean {
   return (
     state.isWindowVisible &&
-    state.mainWindow?.isVisible() &&
-    state.mainWindow?.getOpacity() > 0
+    state.mainWindow?.isVisible() === true &&
+    (state.mainWindow?.getOpacity() ?? 0) > 0
   );
 }
 
@@ -562,7 +570,7 @@ function quitApplication(): void {
 
 // Window dimension functions
 function setWindowDimensions(width: number, height: number): void {
-  if (!state.mainWindow?.isDestroyed()) {
+  if (state.mainWindow && !state.mainWindow.isDestroyed()) {
     const [currentX, currentY] = state.mainWindow.getPosition();
     const primaryDisplay = screen.getPrimaryDisplay();
     const workArea = primaryDisplay.workAreaSize;
@@ -585,7 +593,7 @@ async function loadEnvVariables() {
     // Read config using the new store functions
     const storedApiKey = await getStoreValue("api-key");
     const storedModel =
-      (await getStoreValue("api-model")) || "gemini-2.0-flash"; // Default model
+      (await getStoreValue("api-model")) || "gemini-2.5-flash"; // Default model
 
     if (storedApiKey && storedModel) {
       // Set generic environment variables
@@ -660,9 +668,9 @@ async function initializeApp() {
       moveWindowDown: () => moveWindowVertical((y) => y + state.step),
       quitApplication,
       getView: () => state.screenshotHelper?.getView() || "initial",
-      createWindow: () => {
+      createWindow: async () => {
         if (!state.mainWindow) {
-          return createWindow();
+          return await createWindow();
         }
         return state.mainWindow;
       },
@@ -716,13 +724,11 @@ function clearQueues(): void {
 }
 
 function cleanupAllFiles(): void {
-  // Clean up all screenshots
   if (state.screenshotHelper) {
     state.screenshotHelper.cleanupAllScreenshots();
     console.log("All screenshots cleaned up via cleanup function");
   }
 
-  // Clean up all audio recordings
   if (state.audioHelper) {
     state.audioHelper.cleanupAllRecordings();
     console.log("All audio recordings cleaned up via cleanup function");
@@ -746,11 +752,11 @@ function getHasFollowedUp(): boolean {
 async function getConfiguredModel(): Promise<string> {
   try {
     // Use the exported getter
-    const model = (await getStoreValue("api-model")) || "gemini-2.0-flash";
+    const model = (await getStoreValue("api-model")) || "gemini-2.5-flash";
     return model;
   } catch (error) {
     console.error("Error getting configured model from store:", error);
-    return "gpt-4o"; // Return default on error
+    return "gemini-2.5-flash"; // Return default on error
   }
 }
 
@@ -829,7 +835,6 @@ app.on("before-quit", async () => {
     await state.screenCaptureHelper.stopScreenCaptureProtection();
   }
 
-  // Clean up all screenshots
   if (state.screenshotHelper) {
     state.screenshotHelper.cleanupAllScreenshots();
     console.log("All screenshots cleaned up");
@@ -848,7 +853,6 @@ app.on("window-all-closed", async () => {
     await state.screenCaptureHelper.stopScreenCaptureProtection();
   }
 
-  // Clean up all screenshots
   if (state.screenshotHelper) {
     state.screenshotHelper.cleanupAllScreenshots();
     console.log("All screenshots cleaned up on window close");
@@ -867,6 +871,9 @@ app.on("window-all-closed", async () => {
 
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
+    createWindow().catch((error) => {
+      console.error("Failed to create window on activate:", error);
+      app.quit();
+    });
   }
 });

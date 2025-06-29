@@ -34,7 +34,6 @@ export default function Main() {
     };
   }, []);
 
-  // Dynamically update the window size
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -48,7 +47,6 @@ export default function Main() {
     const resizeObserver = new ResizeObserver(updateDimensions);
     resizeObserver.observe(containerRef.current);
 
-    // Also watch DOM changes
     const mutationObserver = new MutationObserver(updateDimensions);
     mutationObserver.observe(containerRef.current, {
       childList: true,
@@ -57,7 +55,6 @@ export default function Main() {
       characterData: true,
     });
 
-    // Initial dimension update
     updateDimensions();
 
     return () => {
@@ -66,7 +63,6 @@ export default function Main() {
     };
   }, [view]);
 
-  // Listen for events that might switch views or show errors
   useEffect(() => {
     const cleanupFunctions = [
       window.electronAPI.onResponseStart(() => {
@@ -87,7 +83,6 @@ export default function Main() {
 
   return (
     <div ref={containerRef} className="min-h-screen overflow-hidden">
-      {/* min-h-screen to prevent weird overflow scroll bar on tooltip hover */}
       {view === "initial" ? (
         <MemoizedInitial setView={setView} />
       ) : view === "response" ? (

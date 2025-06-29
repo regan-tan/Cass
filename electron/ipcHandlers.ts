@@ -9,7 +9,7 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
   ipcMain.handle("get-api-config", async () => {
     try {
       const apiKey = await getStoreValue("api-key");
-      const model = (await getStoreValue("api-model")) || "gemini-2.0-flash";
+      const model = (await getStoreValue("api-model")) || "gemini-2.5-flash";
 
       if (!apiKey) {
         return { success: false, error: "API key not found" };
@@ -82,7 +82,7 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
   // Window dimension handlers
   ipcMain.handle(
     "update-content-dimensions",
-    async (event, { width, height }: { width: number; height: number }) => {
+    async (_, { width, height }: { width: number; height: number }) => {
       if (width && height) {
         deps.setWindowDimensions(width, height);
       }
@@ -91,7 +91,7 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
 
   ipcMain.handle(
     "set-window-dimensions",
-    (event, width: number, height: number) => {
+    (_, width: number, height: number) => {
       deps.setWindowDimensions(width, height);
     }
   );
@@ -163,7 +163,7 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
   ipcMain.handle("start-audio-recording", async () => {
     try {
       const result = await deps.startRecording();
-      return { success: true, ...result };
+      return { ...result };
     } catch (error) {
       console.error("Error starting audio recording:", error);
       return { success: false, error: String(error) };
@@ -173,7 +173,7 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
   ipcMain.handle("stop-audio-recording", async () => {
     try {
       const result = await deps.stopRecording();
-      return { success: true, ...result };
+      return { ...result };
     } catch (error) {
       console.error("Error stopping audio recording:", error);
       return { success: false, error: String(error) };
@@ -362,8 +362,8 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
 
   // Add the initialization to the window creation
   const originalCreateWindow = deps.createWindow;
-  deps.createWindow = () => {
-    const window = originalCreateWindow();
+  deps.createWindow = async () => {
+    const window = await originalCreateWindow();
     setInitialMouseEvents(window);
     return window;
   };
@@ -385,6 +385,32 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
     } catch (error) {
       console.error("Error quitting application:", error);
       return { success: false, error: "Failed to quit application" };
+    }
+  });
+
+  // Screen capture protection status
+  ipcMain.handle("get-screen-protection-status", () => {
+    try {
+      // Access the screen capture helper through deps or main state
+      const mainWindow = deps.getMainWindow();
+      if (!mainWindow) {
+        return { success: false, error: "No main window available", isActive: false };
+      }
+      
+      // Since we don't have direct access to screenCaptureHelper in deps,
+      // we'll check if the platform supports it and assume it's active if we got this far
+      const supported = process.platform === "darwin";
+      const isActive = supported; // If we got this far on macOS, protection should be active
+      
+      return {
+        success: true,
+        isActive,
+        platform: process.platform,
+        supported
+      };
+    } catch (error) {
+      console.error("Error getting screen protection status:", error);
+      return { success: false, error: String(error), isActive: false };
     }
   });
 }

@@ -84,16 +84,17 @@ Swift-based command-line utilities that provide macOS-specific functionality not
 
 **Capabilities:**
 
-- **Screen Filtering**: Makes the application invisible to screen sharing software
+- **Critical Screen Filtering**: Makes the application invisible to screen sharing software (REQUIRED for app startup)
 - **Audio Mixing**: Professional-grade audio recording and mixing
 - **System Integration**: Deep macOS integration for seamless operation
-- **Permission Management**: Handles screen recording and microphone permissions
+- **Permission Management**: Handles screen recording and microphone permissions with mandatory validation
 
 **Requirements:**
 
-- macOS 12.3+ for ScreenCaptureKit support
-- Screen Recording permission for window filtering
+- **macOS 12.3+ REQUIRED** for ScreenCaptureKit support
+- **Screen Recording permission MANDATORY** - application will not start without it
 - Microphone permission for audio recording
+- Swift helper binaries must be properly built and accessible
 
 ### `/assets` - Application Resources
 
@@ -158,8 +159,9 @@ Configuration files for application building and packaging.
 
 ### Security & Privacy
 
-- **Screen Capture Protection**: Swift helpers prevent detection by screen sharing
-- **Permission Management**: Proper handling of macOS permissions
+- **Mandatory Screen Capture Protection**: Swift helpers are required for application startup on macOS
+- **Robust Error Handling**: Application exits with clear error messages if protection fails
+- **Permission Management**: Proper handling of macOS permissions with user-friendly error dialogs
 - **Data Privacy**: No persistent storage of sensitive audio or visual data
 - **Code Signing**: Proper macOS code signing and notarization
 

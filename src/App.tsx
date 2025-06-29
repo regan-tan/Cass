@@ -20,13 +20,11 @@ const queryClient = new QueryClient({
 export default function App() {
   const [initialized, setInitialized] = useState(false);
 
-  // Helper function to mark initialization complete
   const markInitialized = useCallback(() => {
     setInitialized(true);
     window.__IS_INITIALIZED__ = true;
   }, []);
 
-  // Initialize app with default values
   useEffect(() => {
     try {
       markInitialized();

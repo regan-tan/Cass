@@ -1,15 +1,16 @@
 # Swift Native Helpers
 
-This directory contains Swift-based native utilities that provide macOS-specific functionality for audio mixing and screen capture protection. These helpers are essential for the application's core feature of remaining invisible to screen sharing software.
+This directory contains Swift-based native utilities that provide macOS-specific functionality for audio mixing and screen capture protection. **These helpers are CRITICAL and MANDATORY** for the application's core feature of remaining invisible to screen sharing software - the application will not start without them.
 
 ## Overview
 
 The Swift helpers leverage macOS-specific APIs that are not available through Electron or Node.js, providing:
 
 - **Advanced audio mixing** capabilities using AVFoundation
-- **Screen capture filtering** using ScreenCaptureKit (macOS 12.3+)
+- **MANDATORY Screen capture filtering** using ScreenCaptureKit (macOS 12.3+) - APPLICATION STARTUP REQUIREMENT
 - **Native performance** for real-time audio and video operations
 - **Deep system integration** for seamless user experience
+- **Application startup validation** - main app exits if helpers fail to initialize
 
 ## Architecture
 
@@ -37,10 +38,11 @@ A command-line utility for screen capture protection that:
 
 #### **Core Functionality**
 
-- **Window exclusion**: Uses ScreenCaptureKit to exclude specific windows from screen recordings
+- **CRITICAL Window exclusion**: Uses ScreenCaptureKit to exclude specific windows from screen recordings
 - **Process targeting**: Identifies and filters windows by process ID and optional window title
-- **Permission management**: Handles screen recording permission requests and validation
+- **MANDATORY Permission management**: Handles screen recording permission requests and validation
 - **Real-time filtering**: Continuously monitors and updates capture exclusions
+- **Startup validation**: Must successfully initialize or main application will exit with error dialog
 
 #### **Technical Implementation**
 
@@ -138,9 +140,15 @@ cp .build/release/swift-helpers .build/release/swift-helpers-universal
 
 ### Permissions Required
 
-- **Screen Recording**: Required for ScreenFilterCLI functionality
+- **Screen Recording**: **MANDATORY** for ScreenFilterCLI functionality - app will not start without this
 - **Microphone Access**: Required for AudioMixerCLI recording
 - **Full Disk Access**: May be required in some enterprise environments
+
+### Critical Error Handling
+
+- **Application startup blocking**: If Swift helpers fail, main app shows error dialog and exits
+- **User-friendly error messages**: Clear instructions for resolving permission issues
+- **No fallback mode**: Application prioritizes reliability over availability
 
 ### System Integration
 
@@ -172,10 +180,11 @@ cp .build/release/swift-helpers .build/release/swift-helpers-universal
 
 ### Common Issues
 
-- **Permission errors**: Ensure Screen Recording permission is granted in System Preferences
-- **Build failures**: Verify Xcode command line tools are installed
-- **Runtime errors**: Check console output for detailed error messages
+- **Permission errors**: Ensure Screen Recording permission is granted in System Preferences - **APPLICATION WILL NOT START** without this
+- **Build failures**: Verify Xcode command line tools are installed and run `npm run build:swift`
+- **Runtime errors**: Check console output for detailed error messages before app exits
 - **Performance issues**: Monitor system resources during intensive operations
+- **Startup failures**: If app exits immediately on macOS, check Screen Recording permissions first
 
 ### Debug Mode
 

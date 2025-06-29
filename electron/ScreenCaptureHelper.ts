@@ -50,8 +50,7 @@ export class ScreenCaptureHelper {
     mainWindow: BrowserWindow
   ): Promise<boolean> {
     if (process.platform !== "darwin") {
-      console.log("ScreenCaptureKit protection only available on macOS");
-      return false;
+      throw new Error("ScreenCaptureKit protection only available on macOS");
     }
 
     if (this.isHelperRunning) {
@@ -72,14 +71,14 @@ export class ScreenCaptureHelper {
       if (!fs.existsSync(this.helperPath)) {
         console.error(`Swift helper binary not found at: ${this.helperPath}`);
 
-        // Try to build the helper in development
         if (!app.isPackaged) {
+          console.log("Attempting to build Swift helper in development...");
           await this.buildSwiftHelper();
           if (!fs.existsSync(this.helperPath)) {
-            throw new Error("Failed to build Swift helper");
+            throw new Error(`Failed to build Swift helper. Please run 'npm run build:swift' manually and ensure the binary exists at: ${this.helperPath}`);
           }
         } else {
-          throw new Error("Swift helper binary not found in packaged app");
+          throw new Error(`Swift helper binary not found in packaged app at: ${this.helperPath}. The application cannot provide screen capture protection.`);
         }
       }
 
@@ -114,14 +113,21 @@ export class ScreenCaptureHelper {
         console.log("ScreenCaptureKit protection started successfully");
         return true;
       } else {
-        console.error("Swift helper failed to start properly");
-        return false;
+        this.cleanup();
+        throw new Error("Swift helper failed to start properly. Screen capture protection is required for undetectable operation.");
       }
     } catch (error) {
       console.error("Failed to start ScreenCaptureKit protection:", error);
       this.cleanup();
-      return false;
+      throw error;
     }
+  }
+
+  /**
+   * Check if screen capture protection is currently running
+   */
+  public isProtectionActive(): boolean {
+    return this.isHelperRunning && this.swiftHelperProcess !== null;
   }
 
   /**
@@ -330,8 +336,8 @@ export class ScreenCaptureHelper {
         this.swiftHelperProcess?.off("exit", exitHandler);
       };
 
-      this.swiftHelperProcess.stdout?.on("data", readyHandler);
-      this.swiftHelperProcess.on("exit", exitHandler);
+      this.swiftHelperProcess?.stdout?.on("data", readyHandler);
+      this.swiftHelperProcess?.on("exit", exitHandler);
     });
   }
 

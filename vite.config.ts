@@ -1,4 +1,3 @@
-// vite.config.ts
 import { defineConfig } from "vite";
 import electron from "vite-plugin-electron";
 import path from "path";
@@ -9,7 +8,6 @@ export default defineConfig({
     react(),
     electron([
       {
-        // main.ts
         entry: "electron/main.ts",
         vite: {
           build: {
@@ -23,7 +21,6 @@ export default defineConfig({
         },
       },
       {
-        // preload.ts
         entry: "electron/preload.ts",
         vite: {
           build: {

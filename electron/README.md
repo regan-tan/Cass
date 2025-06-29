@@ -25,7 +25,7 @@ The application entry point that manages:
 - **Configuration management**: Persistent storage for API keys and model preferences using a custom JSON-based store
 - **Helper initialization**: Instantiating and coordinating all helper classes
 - **Environment setup**: Loading development vs production configurations
-- **Screen capture protection**: Initializing Swift helpers to hide the app from screen sharing
+- **MANDATORY Screen capture protection**: Requires Swift helpers to start - application exits if protection fails
 
 ### `AudioHelper.ts`
 
@@ -65,14 +65,15 @@ Manages screenshot capture and queue management:
 
 ### `ScreenCaptureHelper.ts`
 
-Provides screen sharing invisibility through native Swift helpers:
+Provides CRITICAL screen sharing invisibility through native Swift helpers:
 
 - **Swift helper management**: Spawns and manages the ScreenFilterCLI process
 - **Window exclusion**: Uses macOS ScreenCaptureKit to exclude the app from screen recordings
 - **Process lifecycle**: Handles starting, stopping, and monitoring the helper process
-- **Permission management**: Ensures proper screen recording permissions
-- **Error recovery**: Handles helper process failures and restarts
+- **MANDATORY Permission management**: Ensures proper screen recording permissions - throws errors if unavailable
+- **Failure handling**: No error recovery - application exits if protection cannot be established
 - **Development vs production**: Adapts helper paths for different build environments
+- **User-friendly error dialogs**: Shows clear error messages when protection fails
 
 ### `shortcuts.ts` (ShortcutsHelper)
 
@@ -96,6 +97,7 @@ Defines Inter-Process Communication between main and renderer processes:
 - **Application state**: Reset functionality and state clearing
 - **External links**: Safe opening of URLs in the default browser
 - **Error propagation**: Proper error handling between processes
+- **Screen protection status**: New handler to check if screen capture protection is active
 
 ### `preload.ts`
 

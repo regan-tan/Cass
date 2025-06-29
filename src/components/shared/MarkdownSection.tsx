@@ -23,9 +23,6 @@ export const MarkdownSection = ({
   return (
     <div className="space-y-2">
       {isLoading && !content ? (
-        // <p className="text-xs text-muted-foreground animate-pulse">
-        //   Generating response...
-        // </p>
         <div className="w-full flex flex-row items-center justify-start">
           <LoadingDots size={4} color={"#FAFAFA"} gap={4} />
         </div>

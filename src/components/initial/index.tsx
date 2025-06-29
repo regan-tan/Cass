@@ -23,7 +23,6 @@ export default function Initial({ setView }: InitialProps) {
   });
 
   useEffect(() => {
-    // Height update logic
     const updateDimensions = () => {
       if (contentRef.current) {
         let contentHeight = contentRef.current.scrollHeight;
@@ -38,20 +37,18 @@ export default function Initial({ setView }: InitialProps) {
       }
     };
 
-    // Initialize resize observer
     const resizeObserver = new ResizeObserver(updateDimensions);
     if (contentRef.current) {
       resizeObserver.observe(contentRef.current);
     }
     updateDimensions();
 
-    // Set up event listeners
     const cleanupFunctions = [
       window.electronAPI.onScreenshotTaken(() => refetch()),
       window.electronAPI.onResetView(() => refetch()),
 
       window.electronAPI.onResponseError((error: string) => {
-        setView("initial"); // Revert to queue if processing fails
+        setView("initial");
         console.error("Processing error:", error);
       }),
     ];

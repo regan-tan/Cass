@@ -55,13 +55,11 @@ export class ProcessingHelper {
                 result.error
               );
             }
-            // Reset view back to queue on error
             console.log("Resetting view to queue due to error");
             this.deps.setView("initial");
             return;
           }
 
-          // Only set view to response if processing succeeded
           console.log("Setting view to response after successful processing");
           mainWindow.webContents.send(
             this.deps.PROCESSING_EVENTS.RESPONSE_SUCCESS,
@@ -74,12 +72,10 @@ export class ProcessingHelper {
             this.deps.PROCESSING_EVENTS.INITIAL_RESPONSE_ERROR,
             error.message || "Server error. Please try again."
           );
-          // Reset view back to queue on error
           console.log("Resetting view to queue due to error");
           this.deps.setView("initial");
         }
       } else {
-        // view == 'response'
         const extraScreenshotQueue =
           this.screenshotHelper.getExtraScreenshotQueue();
         console.log(
@@ -143,11 +139,9 @@ export class ProcessingHelper {
         const imageDataList = screenshots.map((screenshot) => screenshot.data);
         const mainWindow = this.deps.getMainWindow();
 
-        // Get configured provider and API key from environment
         const provider = process.env.API_PROVIDER || "gemini";
         const apiKey = process.env.API_KEY;
 
-        // Get model directly from config store via deps
         const model = await this.deps.getConfiguredModel();
 
         if (!apiKey) {
@@ -163,11 +157,7 @@ export class ProcessingHelper {
         const base64Images = imageDataList.map((data) => data);
 
         if (mainWindow) {
-          const responseResult = await this.generateResponseWithImages(
-            base64Images,
-            apiKey,
-            model
-          );
+          const responseResult = await this.generateResponseWithImages(base64Images, apiKey, model);
 
           if (responseResult.success) {
             this.screenshotHelper.clearExtraScreenshotQueue();
@@ -177,9 +167,7 @@ export class ProcessingHelper {
             );
             return { success: true, data: responseResult.data };
           } else {
-            throw new Error(
-              responseResult.error || "Failed to generate response"
-            );
+            throw new Error(responseResult.error || "Failed to generate response");
           }
         }
       } catch (error: any) {
@@ -224,7 +212,7 @@ export class ProcessingHelper {
 
       const contentParts = [...imageParts];
       console.log(
-        `[PROCESSING] Images added to contentParts: ${imageParts.length}`
+        `Images added to contentParts: ${imageParts.length}`
       );
 
       const audioHelper = this.deps.getAudioHelper();
@@ -242,9 +230,7 @@ export class ProcessingHelper {
               );
               if (audioBase64) {
                 hasAudioInstructions = true;
-                console.log(
-                  `[AUDIO] Audio data available - Base64 length: ${audioBase64.length} characters`
-                );
+                console.log(`Audio data available - Base64 length: ${audioBase64.length} characters`);
 
                 contentParts.push({
                   inlineData: {
@@ -253,31 +239,22 @@ export class ProcessingHelper {
                   },
                 });
 
-                console.log(
-                  `[AUDIO] Audio added to contentParts as multimodal input`
-                );
-                console.log(
-                  `[PROCESSING] Total contentParts: ${contentParts.length} (${imageParts.length} images + 1 audio)`
-                );
+                console.log(`Audio added to contentParts as multimodal input`);
+                console.log(`Total contentParts: ${contentParts.length} (${imageParts.length} images + 1 audio)`);
               } else {
-                console.log(
-                  `[AUDIO WARNING] Audio file found but Base64 conversion failed`
-                );
+                console.log(`Audio file found but Base64 conversion failed`);
               }
             } else {
-              console.log(`[AUDIO WARNING] No audio file path available`);
+              console.log(`No audio file path available`);
             }
           } catch (error) {
-            console.error(
-              "[AUDIO ERROR] Error getting audio data for prompt:",
-              error
-            );
+            console.error("Error getting audio data for prompt:", error);
           }
         } else {
-          console.log(`[AUDIO INFO] No audio recording available`);
+          console.log(`No audio recording available`);
         }
       } else {
-        console.log(`[AUDIO INFO] Audio helper not available`);
+        console.log(`Audio helper not available`);
       }
 
       const promptLines = [];
@@ -449,15 +426,12 @@ export class ProcessingHelper {
           const latestRecording = audioHelper.getLatestRecording();
           if (latestRecording?.filePath) {
             audioHelper.cleanupRecording(latestRecording.filePath);
-            console.log("Cleaned up audio file after processing");
           }
         }
       } catch (streamError) {
         console.error("Streaming error:", streamError);
         throw streamError;
       }
-
-      console.log("API response completed, total length:", responseText.length);
 
       return { success: true, data: responseText };
     } catch (error: any) {
@@ -480,18 +454,11 @@ export class ProcessingHelper {
             "Request timed out. The server took too long to respond. Please try again."
           );
         }
-        return {
-          success: false,
-          error: "Request timed out. Please try again.",
-        };
+        return { success: false, error: "Request timed out. Please try again." };
       }
 
-      if (
-        error.response?.data?.error?.includes(
-          "Please close this window and re-enter a valid Open AI API key."
-        ) ||
-        error.response?.data?.error?.includes("API key not found")
-      ) {
+      if (error.response?.data?.error?.includes("Please close this window and re-enter a valid Open AI API key.") ||
+          error.response?.data?.error?.includes("API key not found")) {
         if (mainWindow) {
           mainWindow.webContents.send(
             this.deps.PROCESSING_EVENTS.API_KEY_INVALID
@@ -503,16 +470,11 @@ export class ProcessingHelper {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send(
           this.deps.PROCESSING_EVENTS.INITIAL_RESPONSE_ERROR,
-          error.message ||
-            "Server error during response generation. Please try again."
+          error.message || "Server error during response generation. Please try again."
         );
       }
-      console.log("Resetting view to queue due to response generation error");
       this.deps.setView("initial");
-      return {
-        success: false,
-        error: error.message || "Unknown error during response generation",
-      };
+      return { success: false, error: error.message || "Unknown error during response generation" };
     }
   }
 
@@ -553,7 +515,7 @@ export class ProcessingHelper {
 
       const contentParts = [...imageParts];
       console.log(
-        `[FOLLOW-UP] Images added to contentParts: ${imageParts.length}`
+        `Follow-up images added to contentParts: ${imageParts.length}`
       );
 
       const audioHelper = this.deps.getAudioHelper();
@@ -571,9 +533,7 @@ export class ProcessingHelper {
               );
               if (audioBase64) {
                 hasAudioInstructions = true;
-                console.log(
-                  `[FOLLOW-UP AUDIO] Audio data available - Base64 length: ${audioBase64.length} characters`
-                );
+                console.log(`Follow-up audio data available - Base64 length: ${audioBase64.length} characters`);
 
                 contentParts.push({
                   inlineData: {
@@ -582,33 +542,22 @@ export class ProcessingHelper {
                   },
                 });
 
-                console.log(
-                  `[FOLLOW-UP AUDIO] Audio added to contentParts as multimodal input`
-                );
-                console.log(
-                  `[FOLLOW-UP] Total contentParts: ${contentParts.length} (${imageParts.length} images + 1 audio)`
-                );
+                console.log(`Follow-up audio added to contentParts as multimodal input`);
+                console.log(`Follow-up total contentParts: ${contentParts.length} (${imageParts.length} images + 1 audio)`);
               } else {
-                console.log(
-                  `[FOLLOW-UP AUDIO WARNING] Audio file found but Base64 conversion failed`
-                );
+                console.log(`Follow-up audio file found but Base64 conversion failed`);
               }
             } else {
-              console.log(
-                `[FOLLOW-UP AUDIO WARNING] No audio file path available`
-              );
+              console.log(`Follow-up no audio file path available`);
             }
           } catch (error) {
-            console.error(
-              "[FOLLOW-UP AUDIO ERROR] Error getting audio data for follow-up prompt:",
-              error
-            );
+            console.error("Follow-up error getting audio data for prompt:", error);
           }
         } else {
-          console.log(`[FOLLOW-UP AUDIO INFO] No audio recording available`);
+          console.log(`Follow-up no audio recording available`);
         }
       } else {
-        console.log(`[FOLLOW-UP AUDIO INFO] Audio helper not available`);
+        console.log(`Follow-up audio helper not available`);
       }
 
       const promptLines = [];
@@ -777,14 +726,8 @@ export class ProcessingHelper {
           const latestRecording = audioHelper.getLatestRecording();
           if (latestRecording?.filePath) {
             audioHelper.cleanupRecording(latestRecording.filePath);
-            console.log("Cleaned up audio file after follow-up processing");
           }
         }
-
-        console.log(
-          "API response completed for follow-up, total length:",
-          followUpResponse.length
-        );
 
         return { success: true, data: followUpResponse };
       } catch (error: any) {
@@ -850,7 +793,6 @@ export class ProcessingHelper {
       mainWindow.webContents.send("reset-view");
     }
 
-    console.log("Processing reset by user (Command+R)");
   }
 
   public isProcessing(): boolean {
