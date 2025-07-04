@@ -2,6 +2,8 @@
 
 **Cass** is your invisible AI companion for screen-sharing sessions. It stays completely hidden from Zoom, Google Meet, and other screen capture software while providing intelligent, contextual responses during calls, interviews, and presentations.
 
+**Note: Cass is no longer invisible to Zoom out of the box due to changes in their screen recording mechanism. In order for it to be invisible, you will need to manually change the zoom screen recording permissions to advanced screen filtering.**
+
 ## How It Works
 
 1. **Press `Cmd/Ctrl + Enter`** - Starts recording audio and takes a screenshot
@@ -10,6 +12,7 @@
 4. **Continue Conversations** - Follow up with additional context or reset with `Cmd/Ctrl + R`
 
 Perfect for:
+
 - Job interviews and technical assessments
 - Client presentations and sales calls
 - Educational lectures and training sessions
@@ -48,6 +51,7 @@ Perfect for:
 **Most common issue**: Screen Recording permission not granted
 
 **Solution**:
+
 1. Open **System Preferences** > **Security & Privacy** > **Privacy**
 2. Click **"Screen Recording"** in the left sidebar
 3. Ensure **Cass is checked** in the list
@@ -59,6 +63,7 @@ Perfect for:
 ### Why is Screen Protection Mandatory?
 
 Cass prioritizes **reliable invisibility** over convenience. This ensures:
+
 - **Consistent invisibility** during screen sharing sessions
 - **No accidental exposure** that could compromise your privacy
 - **Professional reliability** for high-stakes situations
@@ -66,11 +71,13 @@ Cass prioritizes **reliable invisibility** over convenience. This ensures:
 ## System Requirements
 
 ### macOS
+
 - **macOS 12.3+** required for ScreenCaptureKit support
 - **Screen Recording permission** required (System Preferences > Security & Privacy > Privacy > Screen Recording)
 - Application will not start without proper screen capture protection
 
 ### Windows
+
 - **Windows 10+** recommended
 - Core functionality available (screen protection features limited)
 
