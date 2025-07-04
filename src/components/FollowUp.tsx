@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import Commands from "@/components/Commands";
 import { MarkdownSection } from "@/components/shared/MarkdownSection";
-import { Screenshot } from "@/types/screenshots";
+import { Screenshot } from "@/types";
 import { fetchScreenshots } from "@/utils/screenshots";
 
 interface TaskResponseData {

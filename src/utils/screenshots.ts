@@ -1,4 +1,4 @@
-import { Screenshot } from "../types/screenshots";
+import { Screenshot } from "../types";
 
 export async function fetchScreenshots(): Promise<Screenshot[]> {
   try {

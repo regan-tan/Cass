@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
-import Initial from "@/components/initial";
-import Response from "@/components/response";
+import Initial from "@/components/Initial";
+import Response from "@/components/Response";
 import { memo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 

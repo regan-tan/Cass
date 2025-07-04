@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 
-import Main from "@/components/main";
+import Main from "@/components/Main";
 
 const queryClient = new QueryClient({
   defaultOptions: {

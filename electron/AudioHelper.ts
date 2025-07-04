@@ -22,7 +22,7 @@ export class AudioHelper {
   private tempDir: string;
 
   constructor() {
-    this.tempDir = path.join(os.tmpdir(), "ikiag-audio");
+    this.tempDir = path.join(os.tmpdir(), "cass-audio");
     this.ensureTempDir();
   }
 

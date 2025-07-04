@@ -1,5 +1,5 @@
 {
-  "name": "ikiag",
+  "name": "cass",
   "version": "1.0.0",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -14,8 +14,8 @@
     "build": "cross-env NODE_ENV=production rimraf dist dist-electron && npm run build:swift:universal && vite build && tsc -p tsconfig.electron.json && electron-builder --mac --win --x64"
   },
   "build": {
-    "appId": "com.jaehyeongpark.ikiag",
-    "productName": "Ikiag",
+    "appId": "com.jaehyeongpark.cass",
+    "productName": "Cass",
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
@@ -53,7 +53,7 @@
           ]
         }
       ],
-      "artifactName": "Ikiag-${arch}.${ext}",
+      "artifactName": "Cass-${arch}.${ext}",
       "icon": "assets/icons/mac/icon.icns",
       "hardenedRuntime": false,
       "gatekeeperAssess": false,
@@ -62,9 +62,9 @@
       "identity": null,
       "notarize": false,
       "protocols": {
-        "name": "ikiag-protocol",
+        "name": "cass-protocol",
         "schemes": [
-          "ikiag"
+          "cass"
         ]
       }
     },
@@ -73,9 +73,9 @@
       "icon": "assets/icons/win/icon.ico",
       "artifactName": "${productName}-Windows-${version}.${ext}",
       "protocols": {
-        "name": "ikiag-protocol",
+        "name": "cass-protocol",
         "schemes": [
-          "ikiag"
+          "cass"
         ]
       }
     },
@@ -86,9 +86,9 @@
       "icon": "assets/icons/png/icon.png",
       "artifactName": "${productName}-Linux-${version}.${ext}",
       "protocols": {
-        "name": "ikiag-protocol",
+        "name": "cass-protocol",
         "schemes": [
-          "ikiag"
+          "cass"
         ]
       }
     },
@@ -96,7 +96,7 @@
       {
         "provider": "github",
         "owner": "jadenpxrk",
-        "repo": "ikiag",
+        "repo": "cass",
         "private": false,
         "releaseType": "release"
       }

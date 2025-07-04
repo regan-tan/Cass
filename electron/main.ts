@@ -19,7 +19,7 @@ async function initializeStore() {
         ? path.join(process.env.HOME || "", "Library", "Application Support")
         : path.join(process.env.HOME || "", ".config"));
 
-    const configPath = path.join(userDataPath, "ikiag", "config.json");
+    const configPath = path.join(userDataPath, "cass", "config.json");
 
     store = {
       _configPath: configPath,
@@ -416,8 +416,8 @@ async function createWindow(): Promise<BrowserWindow> {
       console.error("ScreenCaptureHelper not initialized. Application requires screen capture protection on macOS.");
       const { dialog } = require('electron');
       dialog.showErrorBox(
-        'IKIAG - Screen Protection Required',
-        'Screen capture protection could not be initialized. This feature is required for IKIAG to remain undetectable during screen sharing.\n\nPlease ensure you have granted Screen Recording permissions to IKIAG in System Preferences > Security & Privacy > Privacy > Screen Recording.'
+        'Cass - Screen Protection Required',
+        'Screen capture protection could not be initialized. This feature is required for Cass to remain undetectable during screen sharing.\n\nPlease ensure you have granted Screen Recording permissions to Cass in System Preferences > Security & Privacy > Privacy > Screen Recording.'
       );
       app.quit();
       return state.mainWindow;
@@ -429,8 +429,8 @@ async function createWindow(): Promise<BrowserWindow> {
         console.error("Failed to start screen capture protection. This is required for undetectable operation.");
         const { dialog } = require('electron');
         dialog.showErrorBox(
-          'IKIAG - Screen Protection Failed',
-          'Screen capture protection failed to start. This feature is required for IKIAG to remain undetectable during screen sharing.\n\nPlease ensure you have granted Screen Recording permissions to IKIAG in System Preferences > Security & Privacy > Privacy > Screen Recording.'
+          'Cass - Screen Protection Failed',
+          'Screen capture protection failed to start. This feature is required for Cass to remain undetectable during screen sharing.\n\nPlease ensure you have granted Screen Recording permissions to Cass in System Preferences > Security & Privacy > Privacy > Screen Recording.'
         );
         app.quit();
         return state.mainWindow;
@@ -441,8 +441,8 @@ async function createWindow(): Promise<BrowserWindow> {
       console.error("Screen capture protection is required for this application to work properly.");
       const { dialog } = require('electron');
       dialog.showErrorBox(
-        'IKIAG - Screen Protection Error',
-        `Screen capture protection encountered an error: ${error}\n\nThis feature is required for IKIAG to remain undetectable during screen sharing.\n\nPlease ensure:\n1. You have granted Screen Recording permissions to IKIAG\n2. You are running macOS 12.3 or later\n3. The Swift helper binaries are properly installed`
+        'Cass - Screen Protection Error',
+        `Screen capture protection encountered an error: ${error}\n\nThis feature is required for Cass to remain undetectable during screen sharing.\n\nPlease ensure:\n1. You have granted Screen Recording permissions to Cass\n2. You are running macOS 12.3 or later\n3. The Swift helper binaries are properly installed`
       );
       app.quit();
       return state.mainWindow;

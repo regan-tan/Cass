@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 
 import Commands from "@/components/Commands";
-import FollowUp from "@/components/follow-up";
+import FollowUp from "@/components/FollowUp";
 import { MarkdownSection } from "@/components/shared/MarkdownSection";
-import { Screenshot } from "@/types/screenshots";
+import { Screenshot } from "@/types";
 import { fetchScreenshots } from "@/utils/screenshots";
 import { useQueryClient } from "@tanstack/react-query";
 

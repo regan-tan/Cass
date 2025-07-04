@@ -131,7 +131,7 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
         {isVisible && (
           <motion.div
             ref={tooltipRef}
-            className="absolute top-full -right-4 mt-4 w-[310px] z-[100] pointer-events-auto"
+            className="absolute top-full -right-4 mt-8 w-[310px] z-[100] pointer-events-auto"
             onMouseEnter={handleTooltipContentMouseEnter}
             onMouseLeave={handleTooltipContentMouseLeave}
             onClick={(e) => e.stopPropagation()}

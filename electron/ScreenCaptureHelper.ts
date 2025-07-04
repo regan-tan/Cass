@@ -61,7 +61,7 @@ export class ScreenCaptureHelper {
     try {
       // Get the process ID and window title
       const pid = process.pid;
-      const windowTitle = mainWindow.getTitle() || "IKIAG";
+      const windowTitle = mainWindow.getTitle() || "Cass";
 
       console.log(
         `Starting ScreenCaptureKit protection for PID: ${pid}, Window: "${windowTitle}"`
@@ -75,10 +75,14 @@ export class ScreenCaptureHelper {
           console.log("Attempting to build Swift helper in development...");
           await this.buildSwiftHelper();
           if (!fs.existsSync(this.helperPath)) {
-            throw new Error(`Failed to build Swift helper. Please run 'npm run build:swift' manually and ensure the binary exists at: ${this.helperPath}`);
+            throw new Error(
+              `Failed to build Swift helper. Please run 'npm run build:swift' manually and ensure the binary exists at: ${this.helperPath}`
+            );
           }
         } else {
-          throw new Error(`Swift helper binary not found in packaged app at: ${this.helperPath}. The application cannot provide screen capture protection.`);
+          throw new Error(
+            `Swift helper binary not found in packaged app at: ${this.helperPath}. The application cannot provide screen capture protection.`
+          );
         }
       }
 
@@ -114,7 +118,9 @@ export class ScreenCaptureHelper {
         return true;
       } else {
         this.cleanup();
-        throw new Error("Swift helper failed to start properly. Screen capture protection is required for undetectable operation.");
+        throw new Error(
+          "Swift helper failed to start properly. Screen capture protection is required for undetectable operation."
+        );
       }
     } catch (error) {
       console.error("Failed to start ScreenCaptureKit protection:", error);

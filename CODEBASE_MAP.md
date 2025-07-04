@@ -1,46 +1,43 @@
-# IKIAG Codebase Map
+# Cass Architecture Reference
 
-**IKIAG** is an AI assistant application that remains invisible to screen-sharing software while providing intelligent responses through combined audio and visual analysis using Google's Gemini AI.
+**Cass** is an invisible AI assistant with a multi-process architecture designed for reliability and security. This document outlines the key architectural decisions and component responsibilities.
 
-## Application Overview
+## Core Design Principles
 
-IKIAG enables users to:
+- **Fail-fast approach**: Critical components must work or app exits with clear error messages
+- **Security-first**: Screen invisibility is mandatory, not optional
+- **Process isolation**: Main process handles system operations, renderer handles UI
+- **Platform-specific optimization**: Native Swift helpers for macOS-specific features
 
-- Record system audio and microphone input simultaneously
-- Capture desktop screenshots on demand (Cmd/Ctrl + Enter)
-- Send combined audio context and visual information to AI for analysis
-- Receive contextual responses to questions, interviews, or meeting content
-- Continue conversations with follow-up interactions
-- Reset sessions for fresh starts (Cmd/Ctrl + R)
+## Process Architecture
 
-The application is specifically designed to be undetectable by screen capture software like Zoom, Google Meet, and other conferencing tools.
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│ React Frontend  │◄──►│ Electron Main   │◄──►│ Swift Helpers   │
+│ (src/)          │    │ (electron/)     │    │ (swift-helpers/)│
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
 
 ## Directory Structure
 
 ### `/electron` - Electron Main Process
 
-The core backend functionality running in the Electron main process. Handles system-level operations, AI processing, and coordination between components.
+**Main Process** - System-level operations and coordination
 
-**Key Components:**
+**Critical Components:**
+- `main.ts` - App lifecycle, **MANDATORY** Swift helper initialization
+- `ScreenCaptureHelper.ts` - **REQUIRED** screen invisibility (app exits if fails)
+- `AudioHelper.ts` - Multi-source recording with intelligent fallbacks
+- `ProcessingHelper.ts` - Google Gemini AI integration
+- `ScreenshotHelper.ts` - Cross-platform screenshot capture
+- `shortcuts.ts` - Global keyboard shortcuts
+- `ipcHandlers.ts` - Secure main-renderer communication
+- `preload.ts` - Security bridge for IPC
 
-- `main.ts` - Application entry point and lifecycle management
-- `AudioHelper.ts` - Multi-source audio recording with intelligent fallbacks
-- `ScreenshotHelper.ts` - Cross-platform screenshot capture and queue management
-- `ProcessingHelper.ts` - Google Gemini AI integration and response handling
-- `ScreenCaptureHelper.ts` - Screen sharing invisibility via Swift helpers
-- `shortcuts.ts` - Global keyboard shortcut management
-- `ipcHandlers.ts` - Inter-process communication handlers
-- `preload.ts` - Secure bridge between main and renderer processes
-
-**Responsibilities:**
-
-- System audio and microphone recording
-- Screenshot capture and management
-- AI API communication and processing
-- Global keyboard shortcut handling
-- Window management and positioning
-- Screen capture protection
-- Persistent configuration storage
+**Error Handling Philosophy:**
+- **Fail fast**: Critical failures result in immediate app exit with error dialog
+- **No fallbacks**: Screen protection must work or app won't start
+- **User-friendly**: Clear error messages with actionable solutions
 
 ### `/src` - React Frontend (Renderer Process)
 

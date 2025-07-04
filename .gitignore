@@ -1,15 +1,45 @@
-node_modules
-dist-electron
-release
-dist
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build outputs
+dist/
+dist-electron/
+release/
+.build/
+
+# Environment variables
 .env
 .env.*
+
+# IDE and editor files
+.vscode/
+.idea/
 **/.DS_Store
-**/.vscode
-**/.idea
-**/package-lock.json
+
+# Development and deployment
 scripts/
-**/scripts/
-scripts/manual-notarize.js
 .copilot/
-.build/
+
+# Swift build artifacts
+swift-helpers/.build/
+swift-helpers/Package.resolved
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# Temporary folders
+tmp/
+temp/

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import Commands from "@/components/Commands";
-import { Screenshot } from "@/types/screenshots";
+import { Screenshot } from "@/types";
 import { fetchScreenshots } from "@/utils/screenshots";
 import { useQuery } from "@tanstack/react-query";
 

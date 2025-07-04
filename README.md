@@ -1,17 +1,19 @@
-# IKIAG - AI Assistant for Screen Share
+# Cass - Invisible AI Assistant
 
-**IKIAG** is an invisible AI assistant designed to help users during screen-sharing sessions like Zoom calls, Google Meet, interviews, or presentations. The application remains hidden from screen capture software while providing intelligent, contextual responses through AI analysis.
+**Cass** is your invisible AI companion for screen-sharing sessions. It stays completely hidden from Zoom, Google Meet, and other screen capture software while providing intelligent, contextual responses during calls, interviews, and presentations.
 
-## Overview
+## How It Works
 
-IKIAG works by recording system audio and microphone input simultaneously. When you press `Cmd/Ctrl + Enter`, it captures a screenshot of your desktop and sends both the audio context (from recording start to keystroke) and the visual information to Google's Gemini AI via API. The AI then provides proactive responses to:
+1. **Press `Cmd/Ctrl + Enter`** - Starts recording audio and takes a screenshot
+2. **AI Analysis** - Combines audio context and visual information using Google Gemini AI
+3. **Get Smart Responses** - Receive contextual answers to questions, discussions, and content
+4. **Continue Conversations** - Follow up with additional context or reset with `Cmd/Ctrl + R`
 
-- Questions asked by interviewers or meeting participants
-- User queries (avoiding the need to switch to ChatGPT)
-- Content visible in screenshots
-- Follow-up discussions building on previous context
-
-The application is specifically designed to be invisible to screen-sharing software, making it perfect for professional calls, interviews, and presentations where you need AI assistance without detection.
+Perfect for:
+- Job interviews and technical assessments
+- Client presentations and sales calls
+- Educational lectures and training sessions
+- Any situation where you need AI assistance without detection
 
 ## Key Features
 
@@ -32,34 +34,34 @@ The application is specifically designed to be invisible to screen-sharing softw
 - **Cmd/Ctrl + Q**: Quit the application
 - **Arrow keys with Cmd/Ctrl**: Move window around the screen
 
+## Quick Start
+
+1. **Download and install** Cass for your platform
+2. **Grant permissions** when prompted (Screen Recording on macOS is required)
+3. **Set up your API key** in the configuration tooltip
+4. **Press `Cmd/Ctrl + Enter`** to take your first screenshot and start using AI assistance
+
 ## Troubleshooting
 
 ### App Won't Start on macOS
 
-If IKIAG exits immediately with an error dialog:
+**Most common issue**: Screen Recording permission not granted
 
-1. **Grant Screen Recording Permission**:
-   - Open System Preferences > Security & Privacy > Privacy
-   - Click "Screen Recording" in the left sidebar
-   - Ensure IKIAG is checked in the list
-   - If not listed, click "+" and add IKIAG
-   - Restart IKIAG after granting permission
+**Solution**:
+1. Open **System Preferences** > **Security & Privacy** > **Privacy**
+2. Click **"Screen Recording"** in the left sidebar
+3. Ensure **Cass is checked** in the list
+4. If not listed, click **"+"** and add Cass
+5. **Restart Cass** after granting permission
 
-2. **Check macOS Version**:
-   - IKIAG requires macOS 12.3 or later
-   - Update macOS if running an older version
-
-3. **Rebuild Swift Helpers** (Development):
-   ```bash
-   npm run build:swift
-   ```
+**System Requirements**: macOS 12.3+ required for screen protection features
 
 ### Why is Screen Protection Mandatory?
 
-IKIAG prioritizes reliable undetectable operation over convenience. By requiring screen capture protection, we ensure:
-- Consistent invisibility during screen sharing sessions
-- No "silent failures" that could expose the application
-- Reliable operation for professional use cases
+Cass prioritizes **reliable invisibility** over convenience. This ensures:
+- **Consistent invisibility** during screen sharing sessions
+- **No accidental exposure** that could compromise your privacy
+- **Professional reliability** for high-stakes situations
 
 ## System Requirements
 
