@@ -2,7 +2,7 @@ import { BrowserWindow, app, screen } from "electron";
 
 import { AudioHelper } from "./AudioHelper";
 import { ProcessingHelper } from "./ProcessingHelper";
-import { ScreenCaptureHelper } from "./ScreenCaptureHelper";
+// import { ScreenCaptureHelper } from "./ScreenCaptureHelper";
 import { ScreenshotHelper } from "./ScreenshotHelper";
 import { ShortcutsHelper } from "./shortcuts";
 import { initializeIpcHandlers } from "./ipcHandlers";
@@ -121,7 +121,7 @@ interface State {
   PROCESSING_EVENTS: ProcessingEvents;
   screenshotHelper: any;
   processingHelper: any;
-  screenCaptureHelper: ScreenCaptureHelper | null;
+  screenCaptureHelper: any | null;
   audioHelper: AudioHelper | null;
   view: "initial" | "response" | "followup";
   step: number;
@@ -223,7 +223,7 @@ export interface initializeIpcHandlerDeps {
 
 function initializeHelpers() {
   state.screenshotHelper = new ScreenshotHelper(state.view);
-  state.screenCaptureHelper = new ScreenCaptureHelper();
+  // state.screenCaptureHelper = new ScreenCaptureHelper();
   state.audioHelper = new AudioHelper();
   state.processingHelper = new ProcessingHelper({
     getScreenshotHelper,
@@ -394,8 +394,8 @@ async function createWindow(): Promise<BrowserWindow> {
   }
 
   // Prevent the window from being captured by screen recording
-  state.mainWindow.webContents.setBackgroundThrottling(false);
-  state.mainWindow.webContents.setFrameRate(60);
+  state.mainWindow.webContents.setBackgroundThrottling(true);
+  state.mainWindow.webContents.setFrameRate(30);
 
   // Set up window listeners
   state.mainWindow.on("move", handleWindowMove);
@@ -410,46 +410,46 @@ async function createWindow(): Promise<BrowserWindow> {
   state.currentY = bounds.y;
   state.isWindowVisible = true;
 
-  // Start ScreenCaptureKit protection for stronger screen recording protection
-  if (process.platform === "darwin") {
-    if (!state.screenCaptureHelper) {
-      console.error("ScreenCaptureHelper not initialized. Application requires screen capture protection on macOS.");
-      const { dialog } = require('electron');
-      dialog.showErrorBox(
-        'Cass - Screen Protection Required',
-        'Screen capture protection could not be initialized. This feature is required for Cass to remain undetectable during screen sharing.\n\nPlease ensure you have granted Screen Recording permissions to Cass in System Preferences > Security & Privacy > Privacy > Screen Recording.'
-      );
-      app.quit();
-      return state.mainWindow;
-    }
-    
-    try {
-      const success = await state.screenCaptureHelper.startScreenCaptureProtection(state.mainWindow);
-      if (!success) {
-        console.error("Failed to start screen capture protection. This is required for undetectable operation.");
-        const { dialog } = require('electron');
-        dialog.showErrorBox(
-          'Cass - Screen Protection Failed',
-          'Screen capture protection failed to start. This feature is required for Cass to remain undetectable during screen sharing.\n\nPlease ensure you have granted Screen Recording permissions to Cass in System Preferences > Security & Privacy > Privacy > Screen Recording.'
-        );
-        app.quit();
-        return state.mainWindow;
-      }
-      console.log("ScreenCaptureKit protection enabled successfully");
-    } catch (error) {
-      console.error("Error starting ScreenCaptureKit protection:", error);
-      console.error("Screen capture protection is required for this application to work properly.");
-      const { dialog } = require('electron');
-      dialog.showErrorBox(
-        'Cass - Screen Protection Error',
-        `Screen capture protection encountered an error: ${error}\n\nThis feature is required for Cass to remain undetectable during screen sharing.\n\nPlease ensure:\n1. You have granted Screen Recording permissions to Cass\n2. You are running macOS 12.3 or later\n3. The Swift helper binaries are properly installed`
-      );
-      app.quit();
-      return state.mainWindow;
-    }
-  } else {
-    console.warn("Screen capture protection is only available on macOS. Some features may not work as expected.");
-  }
+  // Screen capture protection disabled
+  // if (process.platform === "darwin") {
+  //   if (!state.screenCaptureHelper) {
+  //     console.error("ScreenCaptureHelper not initialized. Application requires screen capture protection on macOS.");
+  //     const { dialog } = require('electron');
+  //     dialog.showErrorBox(
+  //       'Cass - Screen Protection Required',
+  //       'Screen capture protection could not be initialized. This feature is required for Cass to remain undetectable during screen sharing.\n\nPlease ensure you have granted Screen Recording permissions to Cass in System Preferences > Security & Privacy > Privacy > Screen Recording.'
+  //     );
+  //     app.quit();
+  //     return state.mainWindow;
+  //   }
+  //   
+  //   try {
+  //     const success = await state.screenCaptureHelper.startScreenCaptureProtection(state.mainWindow);
+  //     if (!success) {
+  //       console.error("Failed to start screen capture protection. This is required for undetectable operation.");
+  //       const { dialog } = require('electron');
+  //       dialog.showErrorBox(
+  //         'Cass - Screen Protection Failed',
+  //         'Screen capture protection failed to start. This feature is required for Cass to remain undetectable during screen sharing.\n\nPlease ensure you have granted Screen Recording permissions to Cass in System Preferences > Security & Privacy > Privacy > Screen Recording.'
+  //       );
+  //       app.quit();
+  //       return state.mainWindow;
+  //     }
+  //     console.log("ScreenCaptureKit protection enabled successfully");
+  //   } catch (error) {
+  //     console.error("Error starting ScreenCaptureKit protection:", error);
+  //     console.error("Screen capture protection is required for this application to work properly.");
+  //     const { dialog } = require('electron');
+  //     dialog.showErrorBox(
+  //       'Cass - Screen Protection Error',
+  //       `Screen capture protection encountered an error: ${error}\n\nThis feature is required for Cass to remain undetectable during screen sharing.\n\nPlease ensure:\n1. You have granted Screen Recording permissions to Cass\n2. You are running macOS 12.3 or later\n3. The Swift helper binaries are properly installed`
+  //     );
+  //     app.quit();
+  //     return state.mainWindow;
+  //   }
+  // } else {
+  //   console.warn("Screen capture protection is only available on macOS. Some features may not work as expected.");
+  // }
 
   return state.mainWindow;
 }
@@ -829,11 +829,11 @@ app.whenReady().then(initializeApp);
 // Handle app events for proper cleanup
 app.on("before-quit", async () => {
   console.log(
-    "App is about to quit, cleaning up ScreenCaptureKit protection, screenshots, and audio recordings..."
+    "App is about to quit, cleaning up screenshots, and audio recordings..."
   );
-  if (state.screenCaptureHelper) {
-    await state.screenCaptureHelper.stopScreenCaptureProtection();
-  }
+  // if (state.screenCaptureHelper) {
+  //   await state.screenCaptureHelper.stopScreenCaptureProtection();
+  // }
 
   if (state.screenshotHelper) {
     state.screenshotHelper.cleanupAllScreenshots();
@@ -848,10 +848,10 @@ app.on("before-quit", async () => {
 });
 
 app.on("window-all-closed", async () => {
-  // Clean up screen capture protection
-  if (state.screenCaptureHelper) {
-    await state.screenCaptureHelper.stopScreenCaptureProtection();
-  }
+  // Clean up screen capture protection (disabled)
+  // if (state.screenCaptureHelper) {
+  //   await state.screenCaptureHelper.stopScreenCaptureProtection();
+  // }
 
   if (state.screenshotHelper) {
     state.screenshotHelper.cleanupAllScreenshots();

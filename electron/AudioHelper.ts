@@ -109,6 +109,8 @@ export class AudioHelper {
           "pcm_s16le",
           "-f",
           "wav",
+          "-threads",
+          process.platform === "darwin" ? "4" : "2",
           "pipe:1",
         ];
 
@@ -176,7 +178,7 @@ export class AudioHelper {
             console.log("FFmpeg mixed recording started successfully");
             resolve({ success: true });
           }
-        }, 2000); // Wait 2 seconds to see if it starts successfully
+        }, 1000); // Reduced wait time to 1 second
       } catch (error: any) {
         resolve({ success: false, error: error.message });
       }
@@ -397,6 +399,8 @@ export class AudioHelper {
         "pcm_s16le", // Linear PCM encoding
         "-f",
         "wav", // Output format
+        "-threads",
+        process.platform === "darwin" ? "4" : "2", // Optimize for Mac M2
         "pipe:1", // Output to stdout instead of file
       ];
 

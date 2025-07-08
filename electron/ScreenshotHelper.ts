@@ -107,7 +107,7 @@ export class ScreenshotHelper {
 
   public async takeScreenshot(): Promise<string> {
     // Small delay to ensure any UI updates are complete
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     let screenshotPath = "";
     try {
