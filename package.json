@@ -55,11 +55,10 @@
       ],
       "artifactName": "Cass-${arch}.${ext}",
       "icon": "assets/icons/mac/icon.icns",
-      "hardenedRuntime": false,
+      "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
-      "identity": null,
       "notarize": false,
       "protocols": {
         "name": "cass-protocol",
