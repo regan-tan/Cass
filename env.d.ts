@@ -81,6 +81,10 @@ interface Window {
       audioBase64?: string;
       error?: string;
     }>;
+    // Audio recording events
+    onAudioRecordingStatusChanged: (
+      callback: (data: { isRecording: boolean; recording?: any }) => void
+    ) => () => void;
   };
 
   electron?: {

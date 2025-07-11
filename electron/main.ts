@@ -36,11 +36,17 @@ async function initializeStore() {
           const config = JSON.parse(data || "{}");
           return config[key];
         } catch (readError) {
-          console.error(`Error reading config file at ${configPath}:`, readError);
+          console.error(
+            `Error reading config file at ${configPath}:`,
+            readError
+          );
           try {
             await fs.writeFile(configPath, JSON.stringify({}), "utf8");
           } catch (writeError) {
-            console.error(`Failed to reset corrupted config file at ${configPath}:`, writeError);
+            console.error(
+              `Failed to reset corrupted config file at ${configPath}:`,
+              writeError
+            );
           }
           return undefined;
         }
@@ -56,7 +62,11 @@ async function initializeStore() {
             // Ignore if file doesn't exist
           }
           config = { ...config, [key]: value };
-          await fs.writeFile(configPath, JSON.stringify(config, null, 2), "utf8");
+          await fs.writeFile(
+            configPath,
+            JSON.stringify(config, null, 2),
+            "utf8"
+          );
           return true;
         } catch (error) {
           console.error(`Error setting ${key} in config:`, error);
@@ -224,7 +234,7 @@ export interface initializeIpcHandlerDeps {
 function initializeHelpers() {
   state.screenshotHelper = new ScreenshotHelper(state.view);
   // state.screenCaptureHelper = new ScreenCaptureHelper();
-  state.audioHelper = new AudioHelper();
+  state.audioHelper = new AudioHelper(state.mainWindow);
   state.processingHelper = new ProcessingHelper({
     getScreenshotHelper,
     getMainWindow,
@@ -310,6 +320,11 @@ async function createWindow(): Promise<BrowserWindow> {
   };
 
   state.mainWindow = new BrowserWindow(windowSettings);
+
+  // Update audio helper with the new main window reference
+  if (state.audioHelper) {
+    state.audioHelper.setMainWindow(state.mainWindow);
+  }
 
   // Ensure window starts non-interactive (click-through) immediately
   state.mainWindow.setIgnoreMouseEvents(true, { forward: true });
@@ -422,7 +437,7 @@ async function createWindow(): Promise<BrowserWindow> {
   //     app.quit();
   //     return state.mainWindow;
   //   }
-  //   
+  //
   //   try {
   //     const success = await state.screenCaptureHelper.startScreenCaptureProtection(state.mainWindow);
   //     if (!success) {

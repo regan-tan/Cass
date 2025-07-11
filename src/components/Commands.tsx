@@ -1,4 +1,4 @@
-import { BackslashIcon, EnterIcon, MicrophoneIcon } from "./icons";
+import { BackslashIcon, EnterIcon, MicrophoneIcon } from "./Icons";
 import { useEffect, useRef, useState } from "react";
 
 import { COMMAND_KEY } from "../utils/platform";
@@ -24,11 +24,6 @@ export default function Commands({
   );
   const [recordingElapsedTime, setRecordingElapsedTime] = useState(0);
 
-  const statusCheckControl = useRef({
-    skipStatusChecks: false,
-    lastUserInteraction: 0,
-  });
-
   const MAX_RECORDING_TIME = (59 * 60 + 59) * 1000;
 
   const formatElapsedTime = (timeMs: number) => {
@@ -46,68 +41,33 @@ export default function Commands({
   };
 
   useEffect(() => {
-    let consecutiveStoppedChecks = 0;
-    const REQUIRED_STOPPED_CHECKS = 2;
+    // Listen for real-time recording status changes instead of polling
+    const unsubscribe = window.electronAPI.onAudioRecordingStatusChanged(
+      ({ isRecording: newIsRecording, recording }) => {
+        const wasRecording = isRecording;
 
-    const checkRecordingStatus = async () => {
-      try {
-        const timeSinceLastInteraction =
-          Date.now() - statusCheckControl.current.lastUserInteraction;
-        if (
-          timeSinceLastInteraction < 2000 ||
-          statusCheckControl.current.skipStatusChecks
-        ) {
-          return;
+        if (newIsRecording && !wasRecording) {
+          // Recording just started
+          const currentTime = Date.now();
+          setIsRecording(true);
+          setRecordingStartTime(currentTime);
+          setRecordingElapsedTime(0);
+          console.log("Recording started - real-time event detected");
+        } else if (!newIsRecording && wasRecording) {
+          // Recording just stopped
+          setIsRecording(false);
+          setRecordingStartTime(null);
+          setRecordingElapsedTime(0);
+          console.log("Recording stopped - real-time event detected");
         }
-
-        const result = await window.electronAPI.getAudioRecordingStatus();
-        if (result.success) {
-          const wasRecording = isRecording;
-
-          if (!result.isRecording && wasRecording) {
-            consecutiveStoppedChecks++;
-
-            if (consecutiveStoppedChecks >= REQUIRED_STOPPED_CHECKS) {
-              setIsRecording(false);
-              setRecordingStartTime(null);
-              setRecordingElapsedTime(0);
-              consecutiveStoppedChecks = 0;
-            }
-          } else if (result.isRecording) {
-            consecutiveStoppedChecks = 0;
-            if (!wasRecording) {
-              const timeSinceLastInteraction =
-                Date.now() - statusCheckControl.current.lastUserInteraction;
-              if (timeSinceLastInteraction > 3000) {
-                setIsRecording(true);
-                if (!recordingStartTime) {
-                  const currentTime = Date.now();
-                  setRecordingStartTime(currentTime);
-                  setRecordingElapsedTime(0);
-                  console.log(
-                    "Recording detected as active, syncing state and setting start time"
-                  );
-                }
-              }
-            }
-          }
-        }
-      } catch (error) {
-        console.error("Error checking recording status:", error);
       }
-    };
+    );
 
-    const markUserInteraction = () => {
-      statusCheckControl.current.lastUserInteraction = Date.now();
-    };
-
-    checkRecordingStatus();
-    const interval = setInterval(checkRecordingStatus, 500);
-
+    // Cleanup subscription on unmount
     return () => {
-      clearInterval(interval);
+      unsubscribe();
     };
-  }, [isRecording, recordingStartTime]);
+  }, [isRecording]);
 
   useEffect(() => {
     if (isRecording && recordingStartTime) {
@@ -149,9 +109,6 @@ export default function Commands({
     e.preventDefault();
     e.stopPropagation();
 
-    statusCheckControl.current.skipStatusChecks = true;
-    statusCheckControl.current.lastUserInteraction = Date.now();
-
     try {
       if (isRecording) {
         setIsRecording(false);
@@ -159,18 +116,16 @@ export default function Commands({
         setRecordingElapsedTime(0);
         await handleStopRecording();
       } else {
-        const startTime = Date.now();
-        setIsRecording(true);
-        setRecordingStartTime(startTime);
-        setRecordingElapsedTime(0);
-
+        // Start recording but don't update UI state yet
+        // Let the real-time events detect when recording actually starts
         const result = await window.electronAPI.startAudioRecording();
         if (!result.success) {
-          setIsRecording(false);
-          setRecordingStartTime(null);
-          setRecordingElapsedTime(0);
           console.error("Failed to start recording:", result.error);
         } else {
+          console.log(
+            "Recording start command sent, waiting for actual recording to begin..."
+          );
+          // UI will be updated by the real-time event when recording actually starts
         }
       }
     } catch (error) {
@@ -178,10 +133,6 @@ export default function Commands({
       setRecordingStartTime(null);
       setRecordingElapsedTime(0);
       console.error("Error toggling audio recording:", error);
-    } finally {
-      setTimeout(() => {
-        statusCheckControl.current.skipStatusChecks = false;
-      }, 3000);
     }
   };
 

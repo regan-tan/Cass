@@ -24,14 +24,18 @@ const MODEL_OPTIONS = [
     name: "Gemini 2.5 Pro",
     description: "Advanced reasoning and capabilities (Google)",
   },
+  {
+    id: "gemini-2.0-flash",
+    name: "Gemini 2.0 Flash",
+    description: "Efficient Gemini model (Google)",
+  },
 ];
 
 export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [apiKey, setApiKey] = useState("");
   const [selectedModel, setSelectedModel] = useState(
-    () =>
-      MODEL_OPTIONS.find((m) => m.default)?.id || "gemini-2.5-flash"
+    () => MODEL_OPTIONS.find((m) => m.default)?.id || "gemini-2.5-flash"
   );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -244,8 +248,7 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
                         e.stopPropagation();
                         try {
                           await (window.electronAPI as any).quitApplication();
-                        } catch (error) {
-                                          }
+                        } catch (error) {}
                       }}
                     >
                       Quit App

@@ -254,6 +254,22 @@ const electronAPI = {
     ipcRenderer.invoke("get-audio-recording-status"),
   getAudioBase64: (filePath: string) =>
     ipcRenderer.invoke("get-audio-base64", filePath),
+  // Audio recording events
+  onAudioRecordingStatusChanged: (
+    callback: (data: { isRecording: boolean; recording?: any }) => void
+  ) => {
+    const subscription = (
+      _: any,
+      data: { isRecording: boolean; recording?: any }
+    ) => callback(data);
+    ipcRenderer.on("audio-recording-status-changed", subscription);
+    return () => {
+      ipcRenderer.removeListener(
+        "audio-recording-status-changed",
+        subscription
+      );
+    };
+  },
   quitApplication: () => ipcRenderer.invoke("quit-application"),
   onResponseChunk: (callback: (data: { response: string }) => void) => {
     const subscription = (_: any, data: { response: string }) => callback(data);

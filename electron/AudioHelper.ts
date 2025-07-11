@@ -1,6 +1,6 @@
+import { BrowserWindow, app } from "electron";
 import { ChildProcess, spawn } from "child_process";
 
-import { app } from "electron";
 import fs from "node:fs";
 import os from "os";
 import path from "node:path";
@@ -20,10 +20,25 @@ export class AudioHelper {
   private completedRecordings: AudioRecording[] = []; // Store completed recordings in memory
   private ffmpegProcess: ChildProcess | null = null;
   private tempDir: string;
+  private mainWindow: BrowserWindow | null = null;
 
-  constructor() {
+  constructor(mainWindow?: BrowserWindow | null) {
     this.tempDir = path.join(os.tmpdir(), "cass-audio");
+    this.mainWindow = mainWindow || null;
     this.ensureTempDir();
+  }
+
+  public setMainWindow(mainWindow: BrowserWindow | null) {
+    this.mainWindow = mainWindow;
+  }
+
+  private emitRecordingStatusChange() {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send("audio-recording-status-changed", {
+        isRecording: this.isRecording,
+        recording: this.currentRecording,
+      });
+    }
   }
 
   private ensureTempDir(): void {
@@ -52,7 +67,7 @@ export class AudioHelper {
 
       this.currentRecording = {
         startTime: timestamp,
-        };
+      };
 
       console.log("Attempting FFmpeg with system audio + microphone...");
       const ffmpegResult = await this.tryFFmpegMixedRecording();
@@ -78,6 +93,7 @@ export class AudioHelper {
       console.error("Error starting audio recording:", error);
       this.isRecording = false;
       this.currentRecording = null;
+      this.emitRecordingStatusChange();
       return { success: false, error: error.message || String(error) };
     }
   }
@@ -176,6 +192,7 @@ export class AudioHelper {
               this.currentRecording.recordingMode = "mixed";
             }
             console.log("FFmpeg mixed recording started successfully");
+            this.emitRecordingStatusChange();
             resolve({ success: true });
           }
         }, 1000); // Reduced wait time to 1 second
@@ -217,6 +234,7 @@ export class AudioHelper {
       this.ffmpegProcess = null;
 
       console.log("Audio recording stopped (kept in memory):", recording);
+      this.emitRecordingStatusChange();
 
       return { success: true, recording };
     } catch (error: any) {
@@ -224,6 +242,7 @@ export class AudioHelper {
       this.isRecording = false;
       this.currentRecording = null;
       this.ffmpegProcess = null;
+      this.emitRecordingStatusChange();
       return { success: false, error: error.message };
     } finally {
       this.currentRecording = null;
@@ -347,6 +366,7 @@ export class AudioHelper {
         this.isRecording = false;
         this.currentRecording = null;
         this.ffmpegProcess = null;
+        this.emitRecordingStatusChange();
       }
 
       this.completedRecordings = [];
@@ -364,8 +384,7 @@ export class AudioHelper {
 
         try {
           fs.rmdirSync(this.tempDir);
-        } catch (error) {
-        }
+        } catch (error) {}
 
         console.log("Cleaned up all audio recordings and temporary files");
       }
@@ -426,6 +445,7 @@ export class AudioHelper {
         console.error("FFmpeg fallback process error:", error);
         this.isRecording = false;
         this.currentRecording = null;
+        this.emitRecordingStatusChange();
       });
 
       this.ffmpegProcess.on("exit", (code) => {
@@ -447,12 +467,14 @@ export class AudioHelper {
       console.log(
         "Audio recording started (system audio only fallback, in memory)"
       );
+      this.emitRecordingStatusChange();
 
       return { success: true };
     } catch (error: any) {
       console.error("Error in fallback recording:", error);
       this.isRecording = false;
       this.currentRecording = null;
+      this.emitRecordingStatusChange();
       return { success: false, error: error.message || String(error) };
     }
   }
@@ -501,6 +523,7 @@ export class AudioHelper {
         console.error("Swift audio mixer process error:", error);
         this.isRecording = false;
         this.currentRecording = null;
+        this.emitRecordingStatusChange();
       });
 
       this.ffmpegProcess.on("exit", (code) => {
@@ -521,12 +544,14 @@ export class AudioHelper {
 
       this.isRecording = true;
       console.log("Swift microphone recording started");
+      this.emitRecordingStatusChange();
 
       return { success: true };
     } catch (error: any) {
       console.error("Error starting Swift microphone recording:", error);
       this.isRecording = false;
       this.currentRecording = null;
+      this.emitRecordingStatusChange();
       return { success: false, error: error.message || String(error) };
     }
   }
