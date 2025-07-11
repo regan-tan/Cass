@@ -19,10 +19,19 @@ export default function Commands({
   const isInitialView = view === "initial";
   const showAskFollowUp = !isInitialView && !isLoading;
   const [isRecording, setIsRecording] = useState(false);
+  const [isStartingRecording, setIsStartingRecording] = useState(false);
   const [recordingStartTime, setRecordingStartTime] = useState<number | null>(
     null
   );
   const [recordingElapsedTime, setRecordingElapsedTime] = useState(0);
+
+  // Debug: log when component mounts/unmounts
+  useEffect(() => {
+    console.log(`Commands component mounted with view: ${view}`);
+    return () => {
+      console.log(`Commands component unmounted from view: ${view}`);
+    };
+  }, [view]);
 
   const MAX_RECORDING_TIME = (59 * 60 + 59) * 1000;
 
@@ -41,21 +50,41 @@ export default function Commands({
   };
 
   useEffect(() => {
+    // Initialize recording state from backend when component mounts
+    const initializeRecordingState = async () => {
+      try {
+        const status = await window.electronAPI.getAudioRecordingStatus();
+        if (status.isRecording && status.recording) {
+          setIsRecording(true);
+          setIsStartingRecording(false);
+          setRecordingStartTime(status.recording.startTime);
+          setRecordingElapsedTime(Date.now() - status.recording.startTime);
+          console.log("Initialized recording state from backend:", status);
+        }
+      } catch (error) {
+        console.error("Failed to initialize recording state:", error);
+      }
+    };
+
+    // Initialize state on mount
+    initializeRecordingState();
+
     // Listen for real-time recording status changes instead of polling
     const unsubscribe = window.electronAPI.onAudioRecordingStatusChanged(
       ({ isRecording: newIsRecording, recording }) => {
-        const wasRecording = isRecording;
-
-        if (newIsRecording && !wasRecording) {
+        console.log("Recording status changed:", { newIsRecording, recording });
+        
+        setIsRecording(newIsRecording);
+        
+        if (newIsRecording && recording?.startTime) {
           // Recording just started
-          const currentTime = Date.now();
-          setIsRecording(true);
-          setRecordingStartTime(currentTime);
+          setIsStartingRecording(false);
+          setRecordingStartTime(recording.startTime);
           setRecordingElapsedTime(0);
           console.log("Recording started - real-time event detected");
-        } else if (!newIsRecording && wasRecording) {
+        } else if (!newIsRecording) {
           // Recording just stopped
-          setIsRecording(false);
+          setIsStartingRecording(false);
           setRecordingStartTime(null);
           setRecordingElapsedTime(0);
           console.log("Recording stopped - real-time event detected");
@@ -67,7 +96,7 @@ export default function Commands({
     return () => {
       unsubscribe();
     };
-  }, [isRecording]);
+  }, []); // Remove isRecording dependency to prevent re-subscription
 
   useEffect(() => {
     if (isRecording && recordingStartTime) {
@@ -90,18 +119,15 @@ export default function Commands({
     try {
       const result = await window.electronAPI.stopAudioRecording();
       if (result.success) {
+        // UI will be updated by the real-time event when recording actually stops
+        console.log("Recording stop command sent, waiting for actual recording to stop...");
       } else {
         console.error("Failed to stop recording:", result.error);
-        setIsRecording(true);
-        const estimatedStartTime = Date.now() - recordingElapsedTime;
-        setRecordingStartTime(estimatedStartTime);
+        // Keep current recording state since stop failed
       }
     } catch (error) {
       console.error("Error stopping audio recording:", error);
-      // On error, revert UI state
-      setIsRecording(true);
-      const estimatedStartTime = Date.now() - recordingElapsedTime;
-      setRecordingStartTime(estimatedStartTime);
+      // Keep current recording state since stop failed
     }
   };
   const handleMicrophoneClick = async (e: React.MouseEvent) => {
@@ -111,16 +137,17 @@ export default function Commands({
 
     try {
       if (isRecording) {
-        setIsRecording(false);
-        setRecordingStartTime(null);
-        setRecordingElapsedTime(0);
         await handleStopRecording();
       } else {
+        // Show starting state immediately
+        setIsStartingRecording(true);
+        
         // Start recording but don't update UI state yet
         // Let the real-time events detect when recording actually starts
         const result = await window.electronAPI.startAudioRecording();
         if (!result.success) {
           console.error("Failed to start recording:", result.error);
+          setIsStartingRecording(false);
         } else {
           console.log(
             "Recording start command sent, waiting for actual recording to begin..."
@@ -130,6 +157,7 @@ export default function Commands({
       }
     } catch (error) {
       setIsRecording(false);
+      setIsStartingRecording(false);
       setRecordingStartTime(null);
       setRecordingElapsedTime(0);
       console.error("Error toggling audio recording:", error);
@@ -199,14 +227,17 @@ export default function Commands({
                 ? `Recording for ${formatElapsedTime(
                     recordingElapsedTime
                   )} - Click to stop`
+                : isStartingRecording
+                ? "Starting recording..."
                 : "Start recording audio (system + microphone if available)"
             }
           >
             <span className="text-xs leading-none truncate">
-              {isRecording ? formatElapsedTime(recordingElapsedTime) : "00:00"}
+              {isRecording ? formatElapsedTime(recordingElapsedTime) : 
+               isStartingRecording ? "..." : "00:00"}
             </span>
             <div className="flex gap-1 flex-shrink-0">
-              <MicrophoneIcon isRecording={isRecording} className="h-3 w-3" />
+              <MicrophoneIcon isRecording={isRecording || isStartingRecording} className="h-3 w-3" />
             </div>
           </button>
 

@@ -138,7 +138,16 @@ export class AudioHelper {
 
         this.ffmpegProcess.stdout?.on("data", (chunk: Buffer) => {
           audioChunks.push(chunk);
-          hasReceivedData = true;
+          if (!hasReceivedData) {
+            hasReceivedData = true;
+            // Only set recording state when we actually receive audio data
+            this.isRecording = true;
+            if (this.currentRecording) {
+              this.currentRecording.recordingMode = "mixed";
+            }
+            console.log("FFmpeg mixed recording confirmed - audio data received");
+            this.emitRecordingStatusChange();
+          }
 
           if (this.currentRecording) {
             this.currentRecording.audioBuffer = Buffer.concat(audioChunks);
@@ -187,15 +196,13 @@ export class AudioHelper {
             this.ffmpegProcess = null;
             resolve({ success: false, error: "FFmpeg mixed recording failed" });
           } else if (hasReceivedData) {
-            this.isRecording = true;
-            if (this.currentRecording) {
-              this.currentRecording.recordingMode = "mixed";
-            }
-            console.log("FFmpeg mixed recording started successfully");
-            this.emitRecordingStatusChange();
+            console.log("FFmpeg mixed recording confirmed working");
+            resolve({ success: true });
+          } else {
+            console.log("FFmpeg mixed recording still starting...");
             resolve({ success: true });
           }
-        }, 1000); // Reduced wait time to 1 second
+        }, 1000); // Keep 1 second timeout for FFmpeg to start
       } catch (error: any) {
         resolve({ success: false, error: error.message });
       }
