@@ -9,13 +9,16 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
   ipcMain.handle("get-api-config", async () => {
     try {
       const apiKey = await getStoreValue("api-key");
-      const model = (await getStoreValue("api-model")) || "gemini-2.5-flash";
+      const model = (await getStoreValue("api-model")) || "gpt-4o";
+      const provider = (await getStoreValue("api-provider")) || "openai";
+      const customPrompt = (await getStoreValue("custom-prompt")) || "";
+      const openaiApiKey = await getStoreValue("openai-api-key");
 
       if (!apiKey) {
         return { success: false, error: "API key not found" };
       }
 
-      return { success: true, apiKey, model };
+      return { success: true, apiKey, model, provider, customPrompt, openaiApiKey };
     } catch (error) {
       console.error("Error getting API config:", error);
       return { success: false, error: "Failed to retrieve API config" };
@@ -25,9 +28,9 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
   // New handler for generic API configuration
   ipcMain.handle(
     "set-api-config",
-    async (_event, config: { apiKey: string; model: string }) => {
+    async (_event, config: { apiKey: string; model: string; provider?: string; customPrompt?: string; openaiApiKey?: string }) => {
       try {
-        const { apiKey, model } = config;
+        const { apiKey, model, provider, customPrompt, openaiApiKey } = config;
 
         if (!apiKey || typeof apiKey !== "string" || !apiKey.trim()) {
           return { success: false, error: "Invalid API key" };
@@ -37,11 +40,19 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
           return { success: false, error: "Invalid model selection" };
         }
 
+        // Determine provider from model if not explicitly provided
+        const actualProvider = provider || 
+          (model.startsWith("gpt-") ? "openai" : 
+           (model.includes("/") ? "openrouter" : "gemini"));
+
         // Store the configuration using imported function
         const successKey = await setStoreValue("api-key", apiKey.trim());
         const successModel = await setStoreValue("api-model", model);
+        const successProvider = await setStoreValue("api-provider", actualProvider);
+        const successPrompt = await setStoreValue("custom-prompt", customPrompt || "");
+        const successOpenAIKey = await setStoreValue("openai-api-key", openaiApiKey || "");
 
-        if (!successKey || !successModel) {
+        if (!successKey || !successModel || !successProvider || !successPrompt || !successOpenAIKey) {
           console.error(
             "Failed to save one or more API config values to store."
           );
@@ -50,7 +61,13 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
 
         // Set environment variables based on provider
         process.env.API_KEY = apiKey.trim();
-        process.env.MODEL = model;
+        process.env.API_MODEL = model;
+        process.env.API_PROVIDER = actualProvider;
+        
+        // Set OpenAI key for audio transcription if provided
+        if (openaiApiKey) {
+          process.env.OPENAI_API_KEY = openaiApiKey;
+        }
 
         // Notify that the config has been updated
         const mainWindow = deps.getMainWindow();
@@ -173,6 +190,17 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
   ipcMain.handle("stop-audio-recording", async () => {
     try {
       const result = await deps.stopRecording();
+      
+      // If recording was successful, automatically process it with AI
+      if (result.success && result.recording) {
+        console.log("Audio recording completed, processing with AI...");
+        try {
+          await deps.processingHelper?.processAudioRecording();
+        } catch (error) {
+          console.error("Error processing audio recording with AI:", error);
+        }
+      }
+      
       return { ...result };
     } catch (error) {
       console.error("Error stopping audio recording:", error);
@@ -243,6 +271,17 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
     } catch (error) {
       console.error("Error processing screenshots:", error);
       return { error: "Failed to process screenshots" };
+    }
+  });
+
+  // Direct prompt processing handler
+  ipcMain.handle("process-direct-prompt", async (_event, prompt: string) => {
+    try {
+      await deps.processingHelper?.processDirectPrompt(prompt);
+      return { success: true };
+    } catch (error) {
+      console.error("Error processing direct prompt:", error);
+      return { error: "Failed to process prompt" };
     }
   });
 
@@ -376,6 +415,23 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
     });
   }
 
+  // Custom prompt handler
+  ipcMain.handle("set-custom-prompt", async (_event, customPrompt: string) => {
+    try {
+      const success = await setStoreValue("custom-prompt", customPrompt || "");
+      
+      if (!success) {
+        console.error("Failed to save custom prompt to store.");
+        return { success: false, error: "Failed to save custom prompt" };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error("Error setting custom prompt:", error);
+      return { success: false, error: "Failed to save custom prompt" };
+    }
+  });
+
   // Quit application handler
   ipcMain.handle("quit-application", async () => {
     try {
@@ -411,6 +467,47 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
     } catch (error) {
       console.error("Error getting screen protection status:", error);
       return { success: false, error: String(error), isActive: false };
+    }
+  });
+
+  // Microphone recording IPC handlers
+  ipcMain.on("audio-data", (event, data) => {
+    try {
+      // Convert array back to Buffer
+      const buffer = Buffer.from(data.buffer);
+      console.log("Received audio data from renderer:", buffer.length, "bytes");
+      
+      // Send to the main process for processing
+      const mainWindow = deps.getMainWindow();
+      if (mainWindow) {
+        mainWindow.webContents.send("audio-data", { buffer: Array.from(buffer) });
+      }
+    } catch (error) {
+      console.error("Error handling audio data:", error);
+    }
+  });
+
+  ipcMain.on("recording-complete", (event) => {
+    try {
+      console.log("Recording completed from renderer");
+      const mainWindow = deps.getMainWindow();
+      if (mainWindow) {
+        mainWindow.webContents.send("recording-complete");
+      }
+    } catch (error) {
+      console.error("Error handling recording complete:", error);
+    }
+  });
+
+  ipcMain.on("recording-error", (event, error) => {
+    try {
+      console.error("Recording error from renderer:", error);
+      const mainWindow = deps.getMainWindow();
+      if (mainWindow) {
+        mainWindow.webContents.send("recording-error", error);
+      }
+    } catch (error) {
+      console.error("Error handling recording error:", error);
     }
   });
 }

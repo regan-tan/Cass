@@ -34,6 +34,8 @@ interface ElectronAPI {
   // shortcuts
   toggleMainWindow: () => Promise<{ success: boolean; error?: string }>;
   triggerScreenshot: () => Promise<{ success: boolean; error?: string }>;
+  triggerProcessScreenshots: () => Promise<{ success: boolean; error?: string }>;
+  processDirectPrompt: (prompt: string) => Promise<{ success: boolean; error?: string }>;
   triggerReset: () => Promise<{ success: boolean; error?: string }>;
   cancelProcessing: () => Promise<{ success: boolean; error?: string }>;
   // movement
@@ -48,12 +50,14 @@ interface ElectronAPI {
   setApiConfig: (config: {
     apiKey: string;
     model: string;
+    openaiApiKey?: string;
   }) => Promise<{ success: boolean; error?: string }>;
   getApiConfig: () => Promise<{
     success: boolean;
     apiKey?: string;
     model?: string;
     provider?: string;
+    openaiApiKey?: string;
     error?: string;
   }>;
   onApiKeyUpdated: (callback: () => void) => () => void;
@@ -203,6 +207,8 @@ const electronAPI = {
     };
   },
   triggerScreenshot: () => ipcRenderer.invoke("trigger-screenshot"),
+  triggerProcessScreenshots: () => ipcRenderer.invoke("trigger-process-screenshots"),
+  processDirectPrompt: (prompt: string) => ipcRenderer.invoke("process-direct-prompt", prompt),
   triggerReset: () => ipcRenderer.invoke("trigger-reset"),
   cancelProcessing: () => ipcRenderer.invoke("cancel-processing"),
   triggerMoveLeft: () => ipcRenderer.invoke("trigger-move-left"),
@@ -229,7 +235,7 @@ const electronAPI = {
   getStoreValue: (key: string) => ipcRenderer.invoke("get-store-value", key),
   setStoreValue: (key: string, value: any) =>
     ipcRenderer.invoke("set-store-value", key, value),
-  setApiConfig: (config: { apiKey: string; model: string }) =>
+  setApiConfig: (config: { apiKey: string; model: string; openaiApiKey?: string }) =>
     ipcRenderer.invoke("set-api-config", config),
   getApiConfig: () => ipcRenderer.invoke("get-api-config"),
   onApiKeyUpdated: (callback: () => void) => {
@@ -250,24 +256,25 @@ const electronAPI = {
   // Audio recording methods
   startAudioRecording: () => ipcRenderer.invoke("start-audio-recording"),
   stopAudioRecording: () => ipcRenderer.invoke("stop-audio-recording"),
-  getAudioRecordingStatus: () =>
-    ipcRenderer.invoke("get-audio-recording-status"),
-  getAudioBase64: (filePath: string) =>
-    ipcRenderer.invoke("get-audio-base64", filePath),
-  // Audio recording events
-  onAudioRecordingStatusChanged: (
-    callback: (data: { isRecording: boolean; recording?: any }) => void
-  ) => {
-    const subscription = (
-      _: any,
-      data: { isRecording: boolean; recording?: any }
-    ) => callback(data);
-    ipcRenderer.on("audio-recording-status-changed", subscription);
+  getAudioRecordingStatus: () => ipcRenderer.invoke("get-audio-recording-status"),
+  getAudioBase64: (filePath: string) => ipcRenderer.invoke("get-audio-base64", filePath),
+  onAudioRecordingStatusChanged: (callback: (data: { isRecording: boolean; recording?: any; recordingMode?: string }) => void) => {
+    const wrappedCallback = (_event: any, data: any) => callback(data);
+    ipcRenderer.on("audio-recording-status-changed", wrappedCallback);
     return () => {
-      ipcRenderer.removeListener(
-        "audio-recording-status-changed",
-        subscription
-      );
+      ipcRenderer.removeListener("audio-recording-status-changed", wrappedCallback);
+    };
+  },
+  
+  // Microphone recording IPC methods
+  sendAudioData: (data: { buffer: number[]; isFinal?: boolean }) => ipcRenderer.send("audio-data", data),
+  sendRecordingComplete: () => ipcRenderer.send("recording-complete"),
+  sendRecordingError: (error: { error: string }) => ipcRenderer.send("recording-error", error),
+  onStartMicrophoneRecording: (callback: () => void) => {
+    const wrappedCallback = () => callback();
+    ipcRenderer.on("start-microphone-recording", wrappedCallback);
+    return () => {
+      ipcRenderer.removeListener("start-microphone-recording", wrappedCallback);
     };
   },
   quitApplication: () => ipcRenderer.invoke("quit-application"),

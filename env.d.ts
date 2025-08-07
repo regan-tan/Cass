@@ -34,6 +34,8 @@ interface Window {
     // shortcuts
     toggleMainWindow: () => Promise<{ success: boolean; error?: string }>;
     triggerScreenshot: () => Promise<{ success: boolean; error?: string }>;
+    triggerProcessScreenshots: () => Promise<{ success: boolean; error?: string }>;
+    processDirectPrompt: (prompt: string) => Promise<{ success: boolean; error?: string }>;
     triggerReset: () => Promise<{ success: boolean; error?: string }>;
     cancelProcessing: () => Promise<{ success: boolean; error?: string }>;
     // movement
@@ -48,14 +50,18 @@ interface Window {
     setApiConfig: (config: {
       apiKey: string;
       model: string;
+      openaiApiKey?: string;
     }) => Promise<{ success: boolean; error?: string }>;
     getApiConfig: () => Promise<{
       success: boolean;
       apiKey?: string;
       model?: string;
       provider?: string;
+      customPrompt?: string;
+      openaiApiKey?: string;
       error?: string;
     }>;
+    setCustomPrompt: (customPrompt: string) => Promise<{ success: boolean; error?: string }>;
     onApiKeyUpdated: (callback: () => void) => () => void;
     onApiKeyMissing: (callback: () => void) => () => void;
     setIgnoreMouseEvents: () => Promise<{ success: boolean; error?: string }>;
@@ -83,8 +89,14 @@ interface Window {
     }>;
     // Audio recording events
     onAudioRecordingStatusChanged: (
-      callback: (data: { isRecording: boolean; recording?: any }) => void
+      callback: (data: { isRecording: boolean; recording?: any; recordingMode?: string }) => void
     ) => () => void;
+    
+    // Microphone recording IPC methods
+    sendAudioData: (data: { buffer: number[]; isFinal?: boolean }) => void;
+    sendRecordingComplete: () => void;
+    sendRecordingError: (error: { error: string }) => void;
+    onStartMicrophoneRecording: (callback: () => void) => () => void;
   };
 
   electron?: {

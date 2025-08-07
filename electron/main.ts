@@ -174,6 +174,7 @@ export interface IProcessingHelperDeps {
   getView: () => "initial" | "response" | "followup";
   setView: (view: "initial" | "response" | "followup") => void;
   getConfiguredModel: () => Promise<string>;
+  getCustomPrompt: () => Promise<string>;
   setHasFollowedUp: (hasFollowedUp: boolean) => void;
   clearQueues: () => void;
   PROCESSING_EVENTS: typeof state.PROCESSING_EVENTS;
@@ -248,6 +249,7 @@ function initializeHelpers() {
     getHasFollowedUp,
     PROCESSING_EVENTS: state.PROCESSING_EVENTS,
     getConfiguredModel,
+    getCustomPrompt,
     getAudioHelper,
     getRecordingStatus,
   } as IProcessingHelperDeps);
@@ -608,16 +610,24 @@ async function loadEnvVariables() {
     // Read config using the new store functions
     const storedApiKey = await getStoreValue("api-key");
     const storedModel =
-      (await getStoreValue("api-model")) || "gemini-2.5-flash"; // Default model
+      (await getStoreValue("api-model")) || "gpt-4o"; // Default model
+    const storedProvider = 
+      (await getStoreValue("api-provider")) || "openai"; // Default provider
+    const storedOpenAIKey = await getStoreValue("openai-api-key"); // Separate OpenAI key for audio transcription
 
     if (storedApiKey && storedModel) {
       // Set generic environment variables
-      process.env.API_PROVIDER = "gemini"; // Always use gemini
+      process.env.API_PROVIDER = storedProvider;
       process.env.API_KEY = storedApiKey;
       process.env.API_MODEL = storedModel;
+      
+      // Set OpenAI key for audio transcription if available
+      if (storedOpenAIKey) {
+        process.env.OPENAI_API_KEY = storedOpenAIKey;
+      }
 
       console.log(
-        `API configuration loaded: Provider=gemini, Model=${storedModel}`
+        `API configuration loaded: Provider=${storedProvider}, Model=${storedModel}`
       );
     } else {
       console.log(
@@ -641,6 +651,7 @@ async function loadEnvVariables() {
       API_PROVIDER: process.env.API_PROVIDER,
       API_KEY: process.env.API_KEY ? "exists" : "missing",
       API_MODEL: process.env.API_MODEL,
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY ? "exists" : "missing",
     });
   } catch (error) {
     console.error("Error loading environment variables:", error);
@@ -767,11 +778,22 @@ function getHasFollowedUp(): boolean {
 async function getConfiguredModel(): Promise<string> {
   try {
     // Use the exported getter
-    const model = (await getStoreValue("api-model")) || "gemini-2.5-flash";
+    const model = (await getStoreValue("api-model")) || "gpt-4o";
     return model;
   } catch (error) {
     console.error("Error getting configured model from store:", error);
-    return "gemini-2.5-flash"; // Return default on error
+    return "gpt-4o"; // Return default on error
+  }
+}
+
+// Function to get the custom prompt from the store
+async function getCustomPrompt(): Promise<string> {
+  try {
+    const customPrompt = await getStoreValue("custom-prompt");
+    return customPrompt || "";
+  } catch (error) {
+    console.error("Error getting custom prompt from store:", error);
+    return ""; // Return empty string on error
   }
 }
 
@@ -831,6 +853,7 @@ export {
   setHasFollowedUp,
   getHasFollowedUp,
   getConfiguredModel,
+  getCustomPrompt,
   isWindowUsable,
   getAudioHelper,
   getRecordingStatus,

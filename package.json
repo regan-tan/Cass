@@ -11,7 +11,7 @@
     "dev": "cross-env NODE_ENV=development vite",
     "dev:prod": "cross-env NODE_ENV=production npm run clean && vite build && tsc -p tsconfig.electron.json && electron .",
     "build:mac": "cross-env NODE_ENV=production rimraf dist dist-electron && npm run build:swift:universal && vite build && tsc -p tsconfig.electron.json && electron-builder --mac",
-    "build": "cross-env NODE_ENV=production rimraf dist dist-electron && npm run build:swift:universal && vite build && tsc -p tsconfig.electron.json && electron-builder --mac --win --x64"
+    "build": "cross-env NODE_ENV=production rimraf dist dist-electron && vite build && tsc -p tsconfig.electron.json && electron-builder --win --x64"
   },
   "build": {
     "appId": "com.jaehyeongpark.cass",
@@ -124,6 +124,8 @@
     "electron-updater": "^6.3.9",
     "framer-motion": "^12.12.1",
     "lucide-react": "^0.460.0",
+    "node-record-lpcm16": "^1.0.1",
+    "openai": "^5.12.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-markdown": "^10.1.0",

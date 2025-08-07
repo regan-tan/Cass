@@ -15,7 +15,7 @@ export default function LoadingDots({ color, size, gap }: LoadingDotsProps) {
       transition: {
         duration: 1,
         repeat: Infinity,
-        ease: "easeInOut",
+        ease: "easeInOut" as const,
       },
     },
   };

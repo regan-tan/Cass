@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import OpenAI from "openai";
 import { IProcessingHelperDeps } from "./main";
 import { ScreenshotHelper } from "./ScreenshotHelper";
 import fs from "node:fs";
@@ -12,6 +13,132 @@ export class ProcessingHelper {
   constructor(deps: IProcessingHelperDeps) {
     this.deps = deps;
     this.screenshotHelper = deps.getScreenshotHelper();
+  }
+
+  public async processDirectPrompt(prompt: string): Promise<void> {
+    if (this.isCurrentlyProcessing) {
+      console.log("Processing already in progress. Skipping duplicate call.");
+      return;
+    }
+
+    this.isCurrentlyProcessing = true;
+    const mainWindow = this.deps.getMainWindow();
+    if (!mainWindow) return;
+
+    try {
+      mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.INITIAL_START);
+      
+      const apiKey = process.env.API_KEY;
+      const model = process.env.MODEL || "gpt-4o";
+      const provider = process.env.API_PROVIDER || "openai";
+
+      if (!apiKey) {
+        mainWindow.webContents.send(
+          this.deps.PROCESSING_EVENTS.INITIAL_RESPONSE_ERROR,
+          "API key not found. Please set your API key in settings."
+        );
+        this.deps.setView("initial");
+        return;
+      }
+
+      let result;
+      if (provider === "openai") {
+        result = await this.generateDirectResponseWithOpenAI(prompt, apiKey, model);
+      } else if (provider === "openrouter") {
+        result = await this.generateDirectResponseWithOpenRouter(prompt, apiKey, model);
+      } else {
+        result = await this.generateDirectResponseWithGemini(prompt, apiKey, model);
+      }
+
+      if (!result.success) {
+        console.log("Processing failed:", result.error);
+        mainWindow.webContents.send(
+          this.deps.PROCESSING_EVENTS.INITIAL_RESPONSE_ERROR,
+          result.error
+        );
+        this.deps.setView("initial");
+        return;
+      }
+
+      console.log("Setting view to response after successful processing");
+      mainWindow.webContents.send(
+        this.deps.PROCESSING_EVENTS.RESPONSE_SUCCESS,
+        { response: result.data }
+      );
+      this.deps.setView("response");
+    } catch (error: any) {
+      console.error("Processing error:", error);
+      mainWindow.webContents.send(
+        this.deps.PROCESSING_EVENTS.INITIAL_RESPONSE_ERROR,
+        error.message || "Server error. Please try again."
+      );
+      this.deps.setView("initial");
+    } finally {
+      this.isCurrentlyProcessing = false;
+    }
+  }
+
+  public async processAudioRecording(): Promise<void> {
+    if (this.isCurrentlyProcessing) {
+      console.log("Processing already in progress. Skipping duplicate call.");
+      return;
+    }
+
+    this.isCurrentlyProcessing = true;
+    const mainWindow = this.deps.getMainWindow();
+    if (!mainWindow) return;
+
+    try {
+      mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.INITIAL_START);
+      
+      const apiKey = process.env.API_KEY;
+      const model = process.env.MODEL || "gpt-4o";
+      const provider = process.env.API_PROVIDER || "openai";
+
+      if (!apiKey) {
+        mainWindow.webContents.send(
+          this.deps.PROCESSING_EVENTS.INITIAL_RESPONSE_ERROR,
+          "API key not found. Please set your API key in settings."
+        );
+        this.deps.setView("initial");
+        return;
+      }
+
+      let result;
+      if (provider === "openai") {
+        result = await this.generateAudioResponseWithOpenAI(apiKey, model);
+      } else if (provider === "openrouter") {
+        result = await this.generateAudioResponseWithOpenRouter(apiKey, model);
+      } else {
+        result = await this.generateAudioResponseWithGemini(apiKey, model);
+      }
+
+      if (!result.success) {
+        console.log("Audio processing failed:", result.error);
+        mainWindow.webContents.send(
+          this.deps.PROCESSING_EVENTS.INITIAL_RESPONSE_ERROR,
+          result.error
+        );
+        this.deps.setView("initial");
+        return;
+      }
+
+      console.log("Setting view to response after successful audio processing");
+      mainWindow.webContents.send(
+        this.deps.PROCESSING_EVENTS.RESPONSE_SUCCESS,
+        { response: result.data }
+      );
+      this.deps.setView("response");
+    } catch (error: any) {
+      console.error("Audio processing error:", error);
+      mainWindow.webContents.send(
+        this.deps.PROCESSING_EVENTS.INITIAL_RESPONSE_ERROR,
+        error.message || "Server error. Please try again."
+      );
+      this.deps.setView("initial");
+    } finally {
+      this.isCurrentlyProcessing = false;
+    }
   }
 
   public async processScreenshots(): Promise<void> {
@@ -139,7 +266,7 @@ export class ProcessingHelper {
         const imageDataList = screenshots.map((screenshot) => screenshot.data);
         const mainWindow = this.deps.getMainWindow();
 
-        const provider = process.env.API_PROVIDER || "gemini";
+        const provider = process.env.API_PROVIDER || "openai";
         const apiKey = process.env.API_KEY;
 
         const model = await this.deps.getConfiguredModel();
@@ -198,6 +325,27 @@ export class ProcessingHelper {
   }
 
   private async generateResponseWithImages(
+    base64Images: string[],
+    apiKey: string,
+    model: string
+  ) {
+    try {
+      const provider = process.env.API_PROVIDER || "openai";
+      
+      if (provider === "openai") {
+        return await this.generateResponseWithOpenAI(base64Images, apiKey, model);
+      } else if (provider === "openrouter") {
+        return await this.generateResponseWithOpenRouter(base64Images, apiKey, model);
+      } else {
+        return await this.generateResponseWithGemini(base64Images, apiKey, model);
+      }
+    } catch (error) {
+      console.error("Error generating response:", error);
+      throw error;
+    }
+  }
+
+  private async generateResponseWithGemini(
     base64Images: string[],
     apiKey: string,
     model: string
@@ -264,7 +412,7 @@ export class ProcessingHelper {
         console.log(`Audio helper not available`);
       }
 
-      const prompt = this.getPrompt(hasAudioInstructions);
+      const prompt = await await this.getPrompt(hasAudioInstructions);
 
       let responseText = "";
       const mainWindow = this.deps.getMainWindow();
@@ -371,6 +519,178 @@ export class ProcessingHelper {
     }
   }
 
+  private async generateResponseWithOpenAI(
+    base64Images: string[],
+    apiKey: string,
+    model: string
+  ) {
+    try {
+      const openai = new OpenAI({ apiKey });
+
+      const audioHelper = this.deps.getAudioHelper();
+      let hasAudioInstructions = false;
+      let audioTranscription = "";
+
+      // Handle audio transcription for OpenAI (it doesn't support audio directly in vision models)
+      if (audioHelper) {
+        const recordingStatus = audioHelper.getRecordingStatus();
+        if (recordingStatus.isRecording && recordingStatus.recording) {
+          try {
+            const audioFilePath = await audioHelper.saveCurrentRecordingForProcessing();
+            if (audioFilePath) {
+              console.log("Transcribing audio with OpenAI Whisper...");
+              
+              const transcription = await openai.audio.transcriptions.create({
+                file: fs.createReadStream(audioFilePath),
+                model: "whisper-1",
+              });
+              
+              audioTranscription = transcription.text;
+              hasAudioInstructions = true;
+              console.log(`Audio transcribed: ${audioTranscription}`);
+            }
+          } catch (error) {
+            console.error("Error transcribing audio:", error);
+          }
+        }
+      }
+
+      // Prepare the content
+      const content: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [];
+      
+      // Add the prompt as text
+      const promptText = await this.getPrompt(hasAudioInstructions);
+      if (hasAudioInstructions && audioTranscription) {
+        content.push({
+          type: "text",
+          text: `${promptText}\n\nAudio transcription: "${audioTranscription}"`
+        });
+      } else {
+        content.push({
+          type: "text",
+          text: promptText
+        });
+      }
+
+      // Add images
+      base64Images.forEach((imageData) => {
+        content.push({
+          type: "image_url",
+          image_url: {
+            url: `data:image/png;base64,${imageData}`,
+            detail: "high"
+          }
+        });
+      });
+
+      console.log(`Processing with OpenAI ${model}: ${base64Images.length} images${hasAudioInstructions ? " + audio" : ""}`);
+
+      let responseText = "";
+      const mainWindow = this.deps.getMainWindow();
+
+      try {
+        const stream = await openai.chat.completions.create({
+          model: model,
+          messages: [
+            {
+              role: "user",
+              content: content
+            }
+          ],
+          temperature: 0,
+          stream: true,
+        });
+
+        let accumulatedText = "";
+        for await (const chunk of stream) {
+          const chunkText = chunk.choices[0]?.delta?.content || "";
+          accumulatedText += chunkText;
+
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send(
+              this.deps.PROCESSING_EVENTS.RESPONSE_CHUNK,
+              { response: accumulatedText }
+            );
+          }
+        }
+
+        responseText = accumulatedText;
+
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send(
+            this.deps.PROCESSING_EVENTS.RESPONSE_SUCCESS,
+            { response: responseText }
+          );
+        }
+
+        // Cleanup audio file
+        if (audioHelper) {
+          const latestRecording = audioHelper.getLatestRecording();
+          if (latestRecording?.filePath) {
+            audioHelper.cleanupRecording(latestRecording.filePath);
+          }
+        }
+      } catch (streamError) {
+        console.error("OpenAI streaming error:", streamError);
+        throw streamError;
+      }
+
+      return { success: true, data: responseText };
+    } catch (error: any) {
+      const mainWindow = this.deps.getMainWindow();
+      console.error("OpenAI response generation error:", {
+        message: error.message,
+        code: error.code,
+        response: error.response?.data,
+      });
+
+      if (error.code === "ETIMEDOUT" || error.response?.status === 504) {
+        this.isCurrentlyProcessing = false;
+        this.deps.setHasFollowedUp(false);
+        this.deps.clearQueues();
+        this.deps.setView("initial");
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send("reset-view");
+          mainWindow.webContents.send(
+            this.deps.PROCESSING_EVENTS.INITIAL_RESPONSE_ERROR,
+            "Request timed out. The server took too long to respond. Please try again."
+          );
+        }
+        return {
+          success: false,
+          error: "Request timed out. Please try again.",
+        };
+      }
+
+      if (
+        error.response?.data?.error?.includes(
+          "Please close this window and re-enter a valid Open AI API key."
+        ) ||
+        error.response?.data?.error?.includes("API key not found")
+      ) {
+        if (mainWindow) {
+          mainWindow.webContents.send(
+            this.deps.PROCESSING_EVENTS.API_KEY_INVALID
+          );
+        }
+        return { success: false, error: error.response.data.error };
+      }
+
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(
+          this.deps.PROCESSING_EVENTS.INITIAL_RESPONSE_ERROR,
+          error.message ||
+            "Server error during response generation. Please try again."
+        );
+      }
+      this.deps.setView("initial");
+      return {
+        success: false,
+        error: error.message || "Unknown error during response generation",
+      };
+    }
+  }
+
   private async processExtraScreenshotsHelper(
     screenshots: Array<{ path: string; data: string }>
   ) {
@@ -378,7 +698,7 @@ export class ProcessingHelper {
       const imageDataList = screenshots.map((screenshot) => screenshot.data);
       const mainWindow = this.deps.getMainWindow();
 
-      const provider = process.env.API_PROVIDER || "gemini";
+      const provider = process.env.API_PROVIDER || "openai";
       const apiKey = process.env.API_KEY;
 
       const model = await this.deps.getConfiguredModel();
@@ -393,6 +713,13 @@ export class ProcessingHelper {
 
       const base64Images = imageDataList.map((data) => data);
 
+      if (provider === "openai") {
+        return await this.generateFollowUpWithOpenAI(base64Images, apiKey, model);
+      } else if (provider === "openrouter") {
+        return await this.generateFollowUpWithOpenRouter(base64Images, apiKey, model);
+      }
+
+      // Gemini implementation (existing code)
       const genAI = new GoogleGenAI({ apiKey });
       const geminiModelId = model.startsWith("gemini-")
         ? model
@@ -463,7 +790,7 @@ export class ProcessingHelper {
         console.log(`Follow-up audio helper not available`);
       }
 
-      const prompt = this.getPrompt(hasAudioInstructions);
+      const prompt = await this.getPrompt(hasAudioInstructions);
 
       let followUpResponse = "";
 
@@ -562,7 +889,542 @@ export class ProcessingHelper {
     }
   }
 
-  private getPrompt(hasAudioInstructions: boolean): string {
+  private async generateResponseWithOpenRouter(
+    base64Images: string[],
+    apiKey: string,
+    model: string
+  ) {
+    try {
+      // OpenRouter uses OpenAI-compatible API with different base URL
+      const openai = new OpenAI({ 
+        apiKey,
+        baseURL: "https://openrouter.ai/api/v1",
+        defaultHeaders: {
+          "HTTP-Referer": "https://cass-ai.com", // Optional: for analytics
+          "X-Title": "Cass AI Assistant", // Optional: for analytics
+        }
+      });
+
+      const audioHelper = this.deps.getAudioHelper();
+      let hasAudioInstructions = false;
+      let audioTranscription = "";
+
+      // Handle audio transcription for OpenRouter (some models support audio, but we'll use Whisper for consistency)
+      if (audioHelper) {
+        const recordingStatus = audioHelper.getRecordingStatus();
+        if (recordingStatus.isRecording && recordingStatus.recording) {
+          try {
+            const audioFilePath = await audioHelper.saveCurrentRecordingForProcessing();
+            if (audioFilePath) {
+              console.log("Transcribing audio with OpenRouter Whisper...");
+              
+              // Use OpenRouter's Whisper endpoint
+              const transcription = await openai.audio.transcriptions.create({
+                file: fs.createReadStream(audioFilePath),
+                model: "openai/whisper-1",
+              });
+              
+              audioTranscription = transcription.text;
+              hasAudioInstructions = true;
+              console.log(`Audio transcribed via OpenRouter: ${audioTranscription}`);
+            }
+          } catch (error) {
+            console.error("Error transcribing audio via OpenRouter:", error);
+          }
+        }
+      }
+
+      // Prepare the content
+      const content: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [];
+      
+      // Add the prompt as text
+      const promptText = await this.getPrompt(hasAudioInstructions);
+      if (hasAudioInstructions && audioTranscription) {
+        content.push({
+          type: "text",
+          text: `${promptText}\n\nAudio transcription: "${audioTranscription}"`
+        });
+      } else {
+        content.push({
+          type: "text",
+          text: promptText
+        });
+      }
+
+      // Add images
+      base64Images.forEach((imageData) => {
+        content.push({
+          type: "image_url",
+          image_url: {
+            url: `data:image/png;base64,${imageData}`,
+            detail: "high"
+          }
+        });
+      });
+
+      console.log(`Processing with OpenRouter ${model}: ${base64Images.length} images${hasAudioInstructions ? " + audio" : ""}`);
+
+      let responseText = "";
+      const mainWindow = this.deps.getMainWindow();
+
+      try {
+        const stream = await openai.chat.completions.create({
+          model: model,
+          messages: [
+            {
+              role: "user",
+              content: content
+            }
+          ],
+          temperature: 0,
+          stream: true,
+        });
+
+        let accumulatedText = "";
+        for await (const chunk of stream) {
+          const chunkText = chunk.choices[0]?.delta?.content || "";
+          accumulatedText += chunkText;
+
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send(
+              this.deps.PROCESSING_EVENTS.RESPONSE_CHUNK,
+              { response: accumulatedText }
+            );
+          }
+        }
+
+        responseText = accumulatedText;
+
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send(
+            this.deps.PROCESSING_EVENTS.RESPONSE_SUCCESS,
+            { response: responseText }
+          );
+        }
+
+        // Cleanup audio file
+        if (audioHelper) {
+          const latestRecording = audioHelper.getLatestRecording();
+          if (latestRecording?.filePath) {
+            audioHelper.cleanupRecording(latestRecording.filePath);
+          }
+        }
+      } catch (streamError) {
+        console.error("OpenRouter streaming error:", streamError);
+        throw streamError;
+      }
+
+      return { success: true, data: responseText };
+    } catch (error: any) {
+      const mainWindow = this.deps.getMainWindow();
+      console.error("OpenRouter response generation error:", {
+        message: error.message,
+        code: error.code,
+        response: error.response?.data,
+      });
+
+      if (error.code === "ETIMEDOUT" || error.response?.status === 504) {
+        this.isCurrentlyProcessing = false;
+        this.deps.setHasFollowedUp(false);
+        this.deps.clearQueues();
+        this.deps.setView("initial");
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send("reset-view");
+          mainWindow.webContents.send(
+            this.deps.PROCESSING_EVENTS.INITIAL_RESPONSE_ERROR,
+            "Request timed out. The server took too long to respond. Please try again."
+          );
+        }
+        return {
+          success: false,
+          error: "Request timed out. Please try again.",
+        };
+      }
+
+      if (
+        error.response?.data?.error?.includes(
+          "Please close this window and re-enter a valid API key."
+        ) ||
+        error.response?.data?.error?.includes("API key not found") ||
+        error.response?.status === 401
+      ) {
+        if (mainWindow) {
+          mainWindow.webContents.send(
+            this.deps.PROCESSING_EVENTS.API_KEY_INVALID
+          );
+        }
+        return { success: false, error: "Invalid OpenRouter API key. Please check your API key." };
+      }
+
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(
+          this.deps.PROCESSING_EVENTS.INITIAL_RESPONSE_ERROR,
+          error.message ||
+            "Server error during response generation. Please try again."
+        );
+      }
+      this.deps.setView("initial");
+      return {
+        success: false,
+        error: error.message || "Unknown error during response generation",
+      };
+    }
+  }
+
+  private async generateFollowUpWithOpenAI(
+    base64Images: string[],
+    apiKey: string,
+    model: string
+  ) {
+    try {
+      const openai = new OpenAI({ apiKey });
+
+      const audioHelper = this.deps.getAudioHelper();
+      let hasAudioInstructions = false;
+      let audioTranscription = "";
+
+      // Handle audio transcription for OpenAI
+      if (audioHelper) {
+        const recordingStatus = audioHelper.getRecordingStatus();
+        if (recordingStatus.isRecording && recordingStatus.recording) {
+          try {
+            const audioFilePath = await audioHelper.saveCurrentRecordingForProcessing();
+            if (audioFilePath) {
+              console.log("Transcribing follow-up audio with OpenAI Whisper...");
+              
+              const transcription = await openai.audio.transcriptions.create({
+                file: fs.createReadStream(audioFilePath),
+                model: "whisper-1",
+              });
+              
+              audioTranscription = transcription.text;
+              hasAudioInstructions = true;
+              console.log(`Follow-up audio transcribed: ${audioTranscription}`);
+            }
+          } catch (error) {
+            console.error("Error transcribing follow-up audio:", error);
+          }
+        }
+      }
+
+      // Prepare the content
+      const content: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [];
+      
+      // Add the prompt as text
+      const promptText = await this.getPrompt(hasAudioInstructions);
+      if (hasAudioInstructions && audioTranscription) {
+        content.push({
+          type: "text",
+          text: `${promptText}\n\nAudio transcription: "${audioTranscription}"`
+        });
+      } else {
+        content.push({
+          type: "text",
+          text: promptText
+        });
+      }
+
+      // Add images
+      base64Images.forEach((imageData) => {
+        content.push({
+          type: "image_url",
+          image_url: {
+            url: `data:image/png;base64,${imageData}`,
+            detail: "high"
+          }
+        });
+      });
+
+      console.log(`Processing follow-up with OpenAI ${model}: ${base64Images.length} images${hasAudioInstructions ? " + audio" : ""}`);
+
+      let followUpResponse = "";
+      const mainWindow = this.deps.getMainWindow();
+
+      try {
+        const stream = await openai.chat.completions.create({
+          model: model,
+          messages: [
+            {
+              role: "user",
+              content: content
+            }
+          ],
+          temperature: 0,
+          stream: true,
+        });
+
+        let accumulatedText = "";
+        for await (const chunk of stream) {
+          const chunkText = chunk.choices[0]?.delta?.content || "";
+          accumulatedText += chunkText;
+
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send(
+              this.deps.PROCESSING_EVENTS.FOLLOW_UP_CHUNK,
+              { response: accumulatedText }
+            );
+          }
+        }
+
+        followUpResponse = accumulatedText;
+
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send(
+            this.deps.PROCESSING_EVENTS.FOLLOW_UP_SUCCESS,
+            { response: followUpResponse }
+          );
+        }
+
+        // Cleanup audio file
+        if (audioHelper) {
+          const latestRecording = audioHelper.getLatestRecording();
+          if (latestRecording?.filePath) {
+            audioHelper.cleanupRecording(latestRecording.filePath);
+          }
+        }
+
+        return { success: true, data: followUpResponse };
+      } catch (error: any) {
+        console.error("OpenAI follow-up processing error details:", {
+          message: error.message,
+          code: error.code,
+          response: error.response?.data,
+        });
+
+        if (
+          error.message === "Request aborted" ||
+          error.name === "AbortError" ||
+          error.message?.includes("Request aborted")
+        ) {
+          return { success: false, error: "Follow-up processing canceled." };
+        }
+
+        if (error.code === "ETIMEDOUT" || error.response?.status === 504) {
+          this.isCurrentlyProcessing = false;
+          this.deps.setHasFollowedUp(false);
+          this.deps.clearQueues();
+          return {
+            success: false,
+            error: "Request timed out. Please try again.",
+          };
+        }
+
+        return {
+          success: false,
+          error: error.message || "Unknown error during follow-up processing",
+        };
+      }
+    } catch (error: any) {
+      console.error("OpenAI follow-up processing error:", error);
+
+      this.isCurrentlyProcessing = false;
+      this.deps.setHasFollowedUp(false);
+
+      const mainWindow = this.deps.getMainWindow();
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(
+          this.deps.PROCESSING_EVENTS.FOLLOW_UP_ERROR,
+          error.message || "Unknown error during follow-up processing"
+        );
+      }
+
+      return {
+        success: false,
+        error: error.message || "Unknown error during follow-up processing",
+      };
+    }
+  }
+
+  private async generateFollowUpWithOpenRouter(
+    base64Images: string[],
+    apiKey: string,
+    model: string
+  ) {
+    try {
+      // OpenRouter uses OpenAI-compatible API with different base URL
+      const openai = new OpenAI({ 
+        apiKey,
+        baseURL: "https://openrouter.ai/api/v1",
+        defaultHeaders: {
+          "HTTP-Referer": "https://cass-ai.com", // Optional: for analytics
+          "X-Title": "Cass AI Assistant", // Optional: for analytics
+        }
+      });
+
+      const audioHelper = this.deps.getAudioHelper();
+      let hasAudioInstructions = false;
+      let audioTranscription = "";
+
+      // Handle audio transcription for OpenRouter follow-up
+      if (audioHelper) {
+        const recordingStatus = audioHelper.getRecordingStatus();
+        if (recordingStatus.isRecording && recordingStatus.recording) {
+          try {
+            const audioFilePath = await audioHelper.saveCurrentRecordingForProcessing();
+            if (audioFilePath) {
+              console.log("Transcribing follow-up audio with OpenRouter Whisper...");
+              
+              const transcription = await openai.audio.transcriptions.create({
+                file: fs.createReadStream(audioFilePath),
+                model: "openai/whisper-1",
+              });
+              
+              audioTranscription = transcription.text;
+              hasAudioInstructions = true;
+              console.log(`Follow-up audio transcribed via OpenRouter: ${audioTranscription}`);
+            }
+          } catch (error) {
+            console.error("Error transcribing follow-up audio via OpenRouter:", error);
+          }
+        }
+      }
+
+      // Prepare the content
+      const content: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [];
+      
+      // Add the prompt as text
+      const promptText = await this.getPrompt(hasAudioInstructions);
+      if (hasAudioInstructions && audioTranscription) {
+        content.push({
+          type: "text",
+          text: `${promptText}\n\nAudio transcription: "${audioTranscription}"`
+        });
+      } else {
+        content.push({
+          type: "text",
+          text: promptText
+        });
+      }
+
+      // Add images
+      base64Images.forEach((imageData) => {
+        content.push({
+          type: "image_url",
+          image_url: {
+            url: `data:image/png;base64,${imageData}`,
+            detail: "high"
+          }
+        });
+      });
+
+      console.log(`Processing follow-up with OpenRouter ${model}: ${base64Images.length} images${hasAudioInstructions ? " + audio" : ""}`);
+
+      let followUpResponse = "";
+      const mainWindow = this.deps.getMainWindow();
+
+      try {
+        const stream = await openai.chat.completions.create({
+          model: model,
+          messages: [
+            {
+              role: "user",
+              content: content
+            }
+          ],
+          temperature: 0,
+          stream: true,
+        });
+
+        let accumulatedText = "";
+        for await (const chunk of stream) {
+          const chunkText = chunk.choices[0]?.delta?.content || "";
+          accumulatedText += chunkText;
+
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send(
+              this.deps.PROCESSING_EVENTS.FOLLOW_UP_CHUNK,
+              { response: accumulatedText }
+            );
+          }
+        }
+
+        followUpResponse = accumulatedText;
+
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send(
+            this.deps.PROCESSING_EVENTS.FOLLOW_UP_SUCCESS,
+            { response: followUpResponse }
+          );
+        }
+
+        // Cleanup audio file
+        if (audioHelper) {
+          const latestRecording = audioHelper.getLatestRecording();
+          if (latestRecording?.filePath) {
+            audioHelper.cleanupRecording(latestRecording.filePath);
+          }
+        }
+
+        return { success: true, data: followUpResponse };
+      } catch (error: any) {
+        console.error("OpenRouter follow-up processing error details:", {
+          message: error.message,
+          code: error.code,
+          response: error.response?.data,
+        });
+
+        if (
+          error.message === "Request aborted" ||
+          error.name === "AbortError" ||
+          error.message?.includes("Request aborted")
+        ) {
+          return { success: false, error: "Follow-up processing canceled." };
+        }
+
+        if (error.code === "ETIMEDOUT" || error.response?.status === 504) {
+          this.isCurrentlyProcessing = false;
+          this.deps.setHasFollowedUp(false);
+          this.deps.clearQueues();
+          return {
+            success: false,
+            error: "Request timed out. Please try again.",
+          };
+        }
+
+        return {
+          success: false,
+          error: error.message || "Unknown error during follow-up processing",
+        };
+      }
+    } catch (error: any) {
+      console.error("OpenRouter follow-up processing error:", error);
+
+      this.isCurrentlyProcessing = false;
+      this.deps.setHasFollowedUp(false);
+
+      const mainWindow = this.deps.getMainWindow();
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(
+          this.deps.PROCESSING_EVENTS.FOLLOW_UP_ERROR,
+          error.message || "Unknown error during follow-up processing"
+        );
+      }
+
+      return {
+        success: false,
+        error: error.message || "Unknown error during follow-up processing",
+      };
+    }
+  }
+
+  private async getPrompt(hasAudioInstructions: boolean): Promise<string> {
+    try {
+      // Get custom prompt from store
+      const customPrompt = await this.deps.getCustomPrompt();
+      
+      if (customPrompt && customPrompt.trim()) {
+        // Replace {audio} placeholder with audio context if available
+        let prompt = customPrompt.trim();
+        if (hasAudioInstructions) {
+          prompt = prompt.replace(/\{audio\}/g, "Audio context is available and will be provided.");
+        }
+        return prompt;
+      }
+    } catch (error) {
+      console.error("Error getting custom prompt:", error);
+    }
+    
+    // Default prompt if no custom prompt is set
     // Static prompt provided by user, independent of audio presence
     const dynamicContext = "${D1}"; // placeholder for user-provided context injected upstream
     return `You are the user's live-meeting co-pilot. The **ONLY** relevant moment is the end of the audio transcript (CURRENT MOMENT).
@@ -711,5 +1573,464 @@ User-provided context
 
   public isProcessing(): boolean {
     return this.isCurrentlyProcessing;
+  }
+
+  private async generateDirectResponseWithOpenAI(
+    prompt: string,
+    apiKey: string,
+    model: string
+  ): Promise<{ success: boolean; data?: string; error?: string }> {
+    try {
+      const openai = new OpenAI({
+        apiKey: apiKey,
+      });
+
+      const stream = await openai.chat.completions.create({
+        model: model,
+        messages: [{ role: "user", content: prompt }],
+        stream: true,
+      });
+
+      let fullResponse = "";
+      for await (const chunk of stream) {
+        const content = chunk.choices[0]?.delta?.content || "";
+        fullResponse += content;
+        
+        const mainWindow = this.deps.getMainWindow();
+        if (mainWindow) {
+          mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.RESPONSE_CHUNK, {
+            response: content,
+          });
+        }
+      }
+
+      return { success: true, data: fullResponse };
+    } catch (error: any) {
+      console.error("OpenAI API error:", error);
+      if (error.status === 401) {
+        return { success: false, error: "Invalid API key. Please check your OpenAI API key." };
+      } else if (error.status === 429) {
+        return { success: false, error: "Rate limit exceeded. Please try again later." };
+      } else {
+        return { success: false, error: error.message || "OpenAI API error" };
+      }
+    }
+  }
+
+  private async generateDirectResponseWithOpenRouter(
+    prompt: string,
+    apiKey: string,
+    model: string
+  ): Promise<{ success: boolean; data?: string; error?: string }> {
+    try {
+      const openai = new OpenAI({
+        apiKey: apiKey,
+        baseURL: "https://openrouter.ai/api/v1",
+      });
+
+      const stream = await openai.chat.completions.create({
+        model: model,
+        messages: [{ role: "user", content: prompt }],
+        stream: true,
+      });
+
+      let fullResponse = "";
+      for await (const chunk of stream) {
+        const content = chunk.choices[0]?.delta?.content || "";
+        fullResponse += content;
+        
+        const mainWindow = this.deps.getMainWindow();
+        if (mainWindow) {
+          mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.RESPONSE_CHUNK, {
+            response: content,
+          });
+        }
+      }
+
+      return { success: true, data: fullResponse };
+    } catch (error: any) {
+      console.error("OpenRouter API error:", error);
+      if (error.status === 401) {
+        return { success: false, error: "Invalid API key. Please check your OpenRouter API key." };
+      } else if (error.status === 429) {
+        return { success: false, error: "Rate limit exceeded. Please try again later." };
+      } else {
+        return { success: false, error: error.message || "OpenRouter API error" };
+      }
+    }
+  }
+
+  private async generateDirectResponseWithGemini(
+    prompt: string,
+    apiKey: string,
+    model: string
+  ): Promise<{ success: boolean; data?: string; error?: string }> {
+    try {
+      const genAI = new GoogleGenAI({ apiKey });
+      const geminiModelId = model.startsWith("gemini-")
+        ? model
+        : `gemini-${model}`;
+
+      const result = await genAI.models.generateContentStream({
+        model: geminiModelId,
+        contents: [prompt],
+        config: {
+          temperature: 0,
+          thinkingConfig: {
+            thinkingBudget:
+              geminiModelId === "gemini-2.5-flash" ? 0 : undefined,
+          },
+        },
+      });
+
+      let fullResponse = "";
+      for await (const chunk of result) {
+        const content = chunk.text;
+        fullResponse += content;
+        
+        const mainWindow = this.deps.getMainWindow();
+        if (mainWindow) {
+          mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.RESPONSE_CHUNK, {
+            response: content,
+          });
+        }
+      }
+
+      return { success: true, data: fullResponse };
+    } catch (error: any) {
+      console.error("Gemini API error:", error);
+      if (error.message?.includes("API_KEY_INVALID")) {
+        return { success: false, error: "Invalid API key. Please check your Gemini API key." };
+      } else {
+        return { success: false, error: error.message || "Gemini API error" };
+      }
+    }
+  }
+
+  private async generateAudioResponseWithOpenAI(
+    apiKey: string,
+    model: string
+  ): Promise<{ success: boolean; data?: string; error?: string }> {
+    try {
+      const openai = new OpenAI({ apiKey });
+      const audioHelper = this.deps.getAudioHelper();
+      let audioTranscription = "";
+
+      // Get the latest audio recording
+      if (audioHelper) {
+        const latestRecording = audioHelper.getLatestRecording();
+        if (latestRecording) {
+          try {
+            const audioFilePath = await audioHelper.saveCurrentRecordingForProcessing();
+            if (audioFilePath) {
+              console.log("Transcribing audio with OpenAI Whisper...");
+              
+              console.log("Audio file path:", audioFilePath);
+              console.log("Audio file size:", fs.statSync(audioFilePath).size, "bytes");
+              
+              const transcription = await openai.audio.transcriptions.create({
+                file: fs.createReadStream(audioFilePath),
+                model: "whisper-1",
+                language: "en",
+                response_format: "verbose_json",
+                temperature: 0.0, // Lower temperature for more accurate transcription
+                prompt: "This is a clear, well-spoken audio recording. Please transcribe it accurately."
+              });
+              
+              audioTranscription = transcription.text;
+              console.log(`Audio transcribed: "${audioTranscription}"`);
+              console.log("Transcription details:", {
+                language: transcription.language,
+                duration: transcription.duration,
+                segments: transcription.segments?.length || 0
+              });
+            }
+          } catch (error) {
+            console.error("Error transcribing audio:", error);
+            return { success: false, error: "Failed to transcribe audio recording" };
+          }
+        }
+      }
+
+      // Create a prompt for the AI based on the audio transcription
+      // Even if transcription is empty, we can still respond to it
+      const prompt = audioTranscription 
+        ? `You just heard me say: "${audioTranscription}"
+
+Please respond to what I said. Be helpful, concise, and address the content of my message directly.`
+        : `I just recorded some audio but couldn't understand what was said. Please respond as if I asked you a question or made a statement, and provide a helpful response.`;
+
+      console.log(`Processing audio transcription with OpenAI ${model}: "${audioTranscription}"`);
+
+      const stream = await openai.chat.completions.create({
+        model: model,
+        messages: [{ role: "user", content: prompt }],
+        stream: true,
+      });
+
+      let fullResponse = "";
+      for await (const chunk of stream) {
+        const content = chunk.choices[0]?.delta?.content || "";
+        fullResponse += content;
+        
+        const mainWindow = this.deps.getMainWindow();
+        if (mainWindow) {
+          mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.RESPONSE_CHUNK, {
+            response: content,
+          });
+        }
+      }
+
+      // Cleanup audio file
+      if (audioHelper) {
+        const latestRecording = audioHelper.getLatestRecording();
+        if (latestRecording?.filePath) {
+          audioHelper.cleanupRecording(latestRecording.filePath);
+        }
+      }
+
+      return { success: true, data: fullResponse };
+    } catch (error: any) {
+      console.error("OpenAI audio processing error:", error);
+      if (error.status === 401) {
+        return { success: false, error: "Invalid API key. Please check your OpenAI API key." };
+      } else if (error.status === 429) {
+        return { success: false, error: "Rate limit exceeded. Please try again later." };
+      } else {
+        return { success: false, error: error.message || "OpenAI API error" };
+      }
+    }
+  }
+
+  private async generateAudioResponseWithOpenRouter(
+    apiKey: string,
+    model: string
+  ): Promise<{ success: boolean; data?: string; error?: string }> {
+    try {
+      const audioHelper = this.deps.getAudioHelper();
+      let audioTranscription = "";
+
+      // Get the latest audio recording
+      if (audioHelper) {
+        const latestRecording = audioHelper.getLatestRecording();
+        if (latestRecording) {
+          try {
+            const audioFilePath = await audioHelper.saveCurrentRecordingForProcessing();
+            if (audioFilePath) {
+              console.log("Transcribing audio with OpenAI Whisper (for OpenRouter)...");
+              
+              // Use OpenAI's API directly for Whisper transcription since OpenRouter's Whisper endpoint doesn't work
+              // Use the separate OpenAI API key if available, otherwise fall back to the main API key
+              const openaiApiKey = process.env.OPENAI_API_KEY || apiKey;
+              const openaiForWhisper = new OpenAI({
+                apiKey: openaiApiKey,
+              });
+              
+              console.log("Audio file path:", audioFilePath);
+              console.log("Audio file size:", fs.statSync(audioFilePath).size, "bytes");
+              
+              // Check if file exists and has content
+              if (!fs.existsSync(audioFilePath)) {
+                console.error("Audio file does not exist:", audioFilePath);
+                return { success: false, error: "Audio file not found" };
+              }
+              
+              const fileSize = fs.statSync(audioFilePath).size;
+              if (fileSize === 0) {
+                console.error("Audio file is empty:", audioFilePath);
+                return { success: false, error: "Audio file is empty" };
+              }
+              
+              console.log("Audio file exists and has size:", fileSize, "bytes");
+              
+              // Add more detailed logging for debugging
+              const audioStats = fs.statSync(audioFilePath);
+              console.log("Audio file details:", {
+                size: audioStats.size,
+                created: audioStats.birthtime,
+                modified: audioStats.mtime
+              });
+              
+              const transcription = await openaiForWhisper.audio.transcriptions.create({
+                file: fs.createReadStream(audioFilePath),
+                model: "whisper-1",
+                language: "en", // Specify English for better accuracy
+                response_format: "verbose_json", // Get more detailed response
+              });
+              
+              audioTranscription = transcription.text;
+              console.log(`Audio transcribed via OpenAI Whisper: "${audioTranscription}"`);
+              console.log("Transcription details:", {
+                text: transcription.text,
+                language: transcription.language,
+                duration: transcription.duration,
+                segments: transcription.segments?.length || 0
+              });
+              
+              // Check if transcription is empty or just whitespace
+              if (!audioTranscription || audioTranscription.trim() === "") {
+                console.error("Whisper returned empty transcription");
+                console.log("This means the audio file was not recognized as speech");
+              }
+            }
+          } catch (error) {
+            console.error("Error transcribing audio via OpenAI Whisper:", error);
+            return { success: false, error: "Failed to transcribe audio recording. Please ensure you have a valid OpenAI API key configured for audio transcription." };
+          }
+        }
+      }
+
+      // Create a prompt for the AI based on the audio transcription
+      // Even if transcription is empty, we can still respond to it
+      const prompt = audioTranscription 
+        ? `You just heard me say: "${audioTranscription}"
+
+Please respond to what I said. Be helpful, concise, and address the content of my message directly.`
+        : `I just recorded some audio but couldn't understand what was said. Please respond as if I asked you a question or made a statement, and provide a helpful response.`;
+
+      console.log(`Processing audio transcription with OpenRouter ${model}: "${audioTranscription}"`);
+
+      // Use OpenRouter for the AI response
+      const openai = new OpenAI({
+        apiKey: apiKey,
+        baseURL: "https://openrouter.ai/api/v1",
+      });
+
+      const stream = await openai.chat.completions.create({
+        model: model,
+        messages: [{ role: "user", content: prompt }],
+        stream: true,
+      });
+
+      let fullResponse = "";
+      for await (const chunk of stream) {
+        const content = chunk.choices[0]?.delta?.content || "";
+        fullResponse += content;
+        
+        const mainWindow = this.deps.getMainWindow();
+        if (mainWindow) {
+          mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.RESPONSE_CHUNK, {
+            response: content,
+          });
+        }
+      }
+
+      // Cleanup audio file
+      if (audioHelper) {
+        const latestRecording = audioHelper.getLatestRecording();
+        if (latestRecording?.filePath) {
+          audioHelper.cleanupRecording(latestRecording.filePath);
+        }
+      }
+
+      return { success: true, data: fullResponse };
+    } catch (error: any) {
+      console.error("OpenRouter audio processing error:", error);
+      if (error.status === 401) {
+        return { success: false, error: "Invalid API key. Please check your OpenRouter API key." };
+      } else if (error.status === 429) {
+        return { success: false, error: "Rate limit exceeded. Please try again later." };
+      } else {
+        return { success: false, error: error.message || "OpenRouter API error" };
+      }
+    }
+  }
+
+  private async generateAudioResponseWithGemini(
+    apiKey: string,
+    model: string
+  ): Promise<{ success: boolean; data?: string; error?: string }> {
+    try {
+      const genAI = new GoogleGenAI({ apiKey });
+      const geminiModelId = model.startsWith("gemini-")
+        ? model
+        : `gemini-${model}`;
+      const audioHelper = this.deps.getAudioHelper();
+      let audioTranscription = "";
+
+      // Get the latest audio recording
+      if (audioHelper) {
+        const latestRecording = audioHelper.getLatestRecording();
+        if (latestRecording) {
+          try {
+            const audioFilePath = await audioHelper.saveCurrentRecordingForProcessing();
+            if (audioFilePath) {
+              console.log("Transcribing audio with OpenAI Whisper for Gemini...");
+              
+              // Use OpenAI for transcription since Gemini doesn't have audio transcription
+              // Use the separate OpenAI API key if available, otherwise fall back to the main API key
+              const openaiApiKey = process.env.OPENAI_API_KEY || apiKey;
+              const openai = new OpenAI({ apiKey: openaiApiKey });
+              
+              console.log("Audio file path:", audioFilePath);
+              console.log("Audio file size:", fs.statSync(audioFilePath).size, "bytes");
+              
+              const transcription = await openai.audio.transcriptions.create({
+                file: fs.createReadStream(audioFilePath),
+                model: "whisper-1",
+              });
+              
+              audioTranscription = transcription.text;
+              console.log(`Audio transcribed for Gemini: "${audioTranscription}"`);
+            }
+          } catch (error) {
+            console.error("Error transcribing audio for Gemini:", error);
+            return { success: false, error: "Failed to transcribe audio recording. Please ensure you have a valid OpenAI API key configured for audio transcription." };
+          }
+        }
+      }
+
+      // Create a prompt for the AI based on the audio transcription
+      // Even if transcription is empty, we can still respond to it
+      const prompt = audioTranscription 
+        ? `You just heard me say: "${audioTranscription}"
+
+Please respond to what I said. Be helpful, concise, and address the content of my message directly.`
+        : `I just recorded some audio but couldn't understand what was said. Please respond as if I asked you a question or made a statement, and provide a helpful response.`;
+
+      console.log(`Processing audio transcription with Gemini ${geminiModelId}: "${audioTranscription}"`);
+
+      const result = await genAI.models.generateContentStream({
+        model: geminiModelId,
+        contents: [prompt],
+        config: {
+          temperature: 0,
+          thinkingConfig: {
+            thinkingBudget:
+              geminiModelId === "gemini-2.5-flash" ? 0 : undefined,
+          },
+        },
+      });
+
+      let fullResponse = "";
+      for await (const chunk of result) {
+        const content = chunk.text;
+        fullResponse += content;
+        
+        const mainWindow = this.deps.getMainWindow();
+        if (mainWindow) {
+          mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.RESPONSE_CHUNK, {
+            response: content,
+          });
+        }
+      }
+
+      // Cleanup audio file
+      if (audioHelper) {
+        const latestRecording = audioHelper.getLatestRecording();
+        if (latestRecording?.filePath) {
+          audioHelper.cleanupRecording(latestRecording.filePath);
+        }
+      }
+
+      return { success: true, data: fullResponse };
+    } catch (error: any) {
+      console.error("Gemini audio processing error:", error);
+      if (error.message?.includes("API_KEY_INVALID")) {
+        return { success: false, error: "Invalid API key. Please check your Gemini API key." };
+      } else {
+        return { success: false, error: error.message || "Gemini API error" };
+      }
+    }
   }
 }
